@@ -1,6 +1,10 @@
 import numpy as np
+from .formatting import Rename
+from .compose import Compose
+from .pipelines import register
 
 
+@register('PreNormalize3D')
 class PreNormalize3D:
     """PreNormalize for NTURGB+D 3D keypoints (x, y, z). Codes adapted from https://github.com/lshiwjx/2s-AGCN. """
 
@@ -90,3 +94,130 @@ class PreNormalize3D:
         results['total_frames'] = T_new
         results['body_center'] = main_body_center
         return results
+
+
+@register('RandomRot')
+class RandomRot:
+
+    def __init__(self, theta=0.3):
+        self.theta = theta
+
+    def _rot3d(self, theta):
+        cos, sin = np.cos(theta), np.sin(theta)
+        rx = np.array([[1, 0, 0], [0, cos[0], sin[0]], [0, -sin[0], cos[0]]])
+        ry = np.array([[cos[1], 0, -sin[1]], [0, 1, 0], [sin[1], 0, cos[1]]])
+        rz = np.array([[cos[2], sin[2], 0], [-sin[2], cos[2], 0], [0, 0, 1]])
+
+        rot = np.matmul(rz, np.matmul(ry, rx))
+        return rot
+
+    def _rot2d(self, theta):
+        cos, sin = np.cos(theta), np.sin(theta)
+        return np.array([[cos, -sin], [sin, cos]])
+
+    def __call__(self, results):
+        skeleton = results['keypoint']
+        M, T, V, C = skeleton.shape
+
+        if np.all(np.isclose(skeleton, 0)):
+            return results
+
+        assert C in [2, 3]
+        if C == 3:
+            theta = np.random.uniform(-self.theta, self.theta, size=3)
+            rot_mat = self._rot3d(theta)
+        elif C == 2:
+            theta = np.random.uniform(-self.theta)
+            rot_mat = self._rot2d(theta)
+        results['keypoint'] = np.einsum('ab,mtvb->mtva', rot_mat, skeleton)
+
+        return results
+
+
+@register('MergeSkeFeat')
+class MergeSkeFeat:
+    def __init__(self, feat_list=['keypoint'], target='keypoint', axis=-1):
+        """Merge different feats (ndarray) by concatenate them in the last axis. """
+
+        self.feat_list = feat_list
+        self.target = target
+        self.axis = axis
+
+    def __call__(self, results):
+        feats = []
+        for name in self.feat_list:
+            feats.append(results.pop(name))
+        feats = np.concatenate(feats, axis=self.axis)
+        results[self.target] = feats
+        return results
+
+
+@register('GenSkeFeat')
+class GenSkeFeat:
+    def __init__(self, dataset='nturgb+d', feats=['j'], axis=-1):
+        self.dataset = dataset
+        self.feats = feats
+        self.axis = axis
+        ops = []
+        # if 'b' in feats or 'bm' in feats:
+        #     ops.append(JointToBone(dataset=dataset, target='b'))
+        ops.append(Rename({'keypoint': 'j'}))
+        # if 'jm' in feats:
+        #     ops.append(ToMotion(dataset=dataset, source='j', target='jm'))
+        # if 'bm' in feats:
+        #     ops.append(ToMotion(dataset=dataset, source='b', target='bm'))
+        ops.append(MergeSkeFeat(feat_list=feats, axis=axis))
+        self.ops = Compose(ops)
+
+    def __call__(self, results):
+        if 'keypoint_score' in results and 'keypoint' in results:
+            assert self.dataset != 'nturgb+d'
+            assert results['keypoint'].shape[-1] == 2, 'Only 2D keypoints have keypoint_score. '
+            keypoint = results.pop('keypoint')
+            keypoint_score = results.pop('keypoint_score')
+            results['keypoint'] = np.concatenate([keypoint, keypoint_score[..., None]], -1)
+        return self.ops(results)
+
+
+@register('FormatGCNInput')
+class FormatGCNInput:
+    """Format final skeleton shape to the given input_format. """
+
+    def __init__(self, num_person=2, mode='zero'):
+        self.num_person = num_person
+        assert mode in ['zero', 'loop']
+        self.mode = mode
+
+    def __call__(self, results):
+        """Performs the FormatShape formatting.
+
+        Args:
+            results (dict): The resulting dict to be modified and passed
+                to the next transform in pipeline.
+        """
+        keypoint = results['keypoint']
+        if 'keypoint_score' in results:
+            keypoint = np.concatenate((keypoint, results['keypoint_score'][..., None]), axis=-1)
+
+        # M T V C
+        if keypoint.shape[0] < self.num_person:
+            pad_dim = self.num_person - keypoint.shape[0]
+            pad = np.zeros((pad_dim, ) + keypoint.shape[1:], dtype=keypoint.dtype)
+            keypoint = np.concatenate((keypoint, pad), axis=0)
+            if self.mode == 'loop' and keypoint.shape[0] == 1:
+                for i in range(1, self.num_person):
+                    keypoint[i] = keypoint[0]
+
+        elif keypoint.shape[0] > self.num_person:
+            keypoint = keypoint[:self.num_person]
+
+        M, T, V, C = keypoint.shape
+        nc = results.get('num_clips', 1)
+        assert T % nc == 0
+        keypoint = keypoint.reshape((M, nc, T // nc, V, C)).transpose(1, 0, 2, 3, 4)
+        results['keypoint'] = np.ascontiguousarray(keypoint)
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__ + f'(num_person={self.num_person}, mode={self.mode})'
+        return repr_str

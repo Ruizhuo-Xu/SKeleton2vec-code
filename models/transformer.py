@@ -6,6 +6,8 @@ from einops import rearrange, reduce, repeat
 from einops.layers.torch import Rearrange, Reduce
 from torchinfo import summary
 
+from .models import register
+
 
 class JointEmbedding(nn.Module):
     def __init__(self, in_channels: int = 3, temporal_segment_size: int = 4,
@@ -122,6 +124,7 @@ class ClassificationHead(nn.Sequential):
             nn.Linear(emb_size, n_classes))
 
 
+@register('SkT')
 class SkT(nn.Sequential):
     def __init__(self,     
                 in_channels: int = 3,
