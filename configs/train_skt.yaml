@@ -13,7 +13,7 @@ train_dataset:
         {name: ToTensor, args: {keys: [keypoint, label]}},
       ]
       split: xsub_train
-      # first_k: 32
+      # first_k: 100
   batch_size: 32
   num_workers: 8
 

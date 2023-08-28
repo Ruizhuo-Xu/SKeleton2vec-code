@@ -2,6 +2,7 @@ import os
 import time
 import random
 import shutil
+import sys
 
 import torch
 from torch.optim import SGD, Adam, AdamW
@@ -80,6 +81,8 @@ def log(obj, filename='log.txt'):
 def ensure_path(path, remove=True):
     basename = os.path.basename(path.rstrip('/'))
     if os.path.exists(path):
+        sys.stdin = os.fdopen(0, "r")  # 打开标准输入流
+        sys.stdout = os.fdopen(1, "w")  # 打开标准输出流
         if remove and (basename.startswith('_')
                 or input('{} exists, remove? (y/[n]): '.format(path)) == 'y'):
             shutil.rmtree(path)
