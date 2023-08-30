@@ -1,1 +1,1 @@
-# SKeleton2vec
+# Skeleton2vec
