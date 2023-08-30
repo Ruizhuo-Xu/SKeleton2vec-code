@@ -75,10 +75,10 @@ def prepare_training():
         optimizer = utils.make_optimizer(
             model.parameters(), sv_file['optimizer'], load_sd=True)
         epoch_start = sv_file['epoch'] + 1
-        if config.get('multi_step_lr') is None:
+        if config.get('lr_scheduler') is None:
             lr_scheduler = None
         else:
-            lr_scheduler = MultiStepLR(optimizer, **config['multi_step_lr'])
+            lr_scheduler = utils.make_lr_scheduler(optimizer, config['lr_scheduler'])
             for _ in range(epoch_start - 1):
                 lr_scheduler.step()
     else:
@@ -86,10 +86,10 @@ def prepare_training():
         optimizer = utils.make_optimizer(
             model.parameters(), config['optimizer'])
         epoch_start = 1
-        if config.get('multi_step_lr') is None:
+        if config.get('lr_scheduler') is None:
             lr_scheduler = None
         else:
-            lr_scheduler = MultiStepLR(optimizer, **config['multi_step_lr'])
+            lr_scheduler = utils.make_lr_scheduler(optimizer, config['lr_scheduler'])
 
     if dist.get_rank() == 0:
         log('model: #params={}'.format(utils.compute_num_params(model, text=True)))
@@ -183,6 +183,7 @@ def main(rank, world_size, config_, save_path, port='12355'):
         log_info = ['epoch {}/{}'.format(epoch, epoch_max)]
         train_loader.sampler.set_epoch(epoch)
         train_loss, train_acc = train(train_loader, model, optimizer)
+        current_lr = optimizer.param_groups[0]['lr']
         if lr_scheduler is not None:
             lr_scheduler.step()
         v = ddp_reduce(train_loss.v)
@@ -190,12 +191,13 @@ def main(rank, world_size, config_, save_path, port='12355'):
         correct_num = ddp_reduce(train_acc.correct_num)
         total_num = ddp_reduce(train_acc.total_num)
         if rank == 0:
-            print(v, n, correct_num, total_num)
+            # print(v, n, correct_num, total_num)
             train_loss = (v / n)
             train_acc = (train_acc.correct_num / train_acc.total_num)
             log_info.append(f'train: loss={train_loss:.4f}')
             log_info.append(f'train: acc={train_acc:.4f}')
             wandb.log({'train/loss': train_loss, 'train/acc': train_acc}, epoch)
+            wandb.log({'train/lr': current_lr}, epoch)
 
         model_spec = config['model']
         model_spec['sd'] = model.module.state_dict()
@@ -220,7 +222,7 @@ def main(rank, world_size, config_, save_path, port='12355'):
             correct_num = ddp_reduce(val_acc.correct_num)
             total_num = ddp_reduce(val_acc.total_num)
             if rank == 0:
-                print(v, n, correct_num, total_num)
+                # print(v, n, correct_num, total_num)
                 val_loss = (v / n)
                 val_acc = (correct_num / total_num)
                 log_info.append(f'val: loss={val_loss:.4f}')

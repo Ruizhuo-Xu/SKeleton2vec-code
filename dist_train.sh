@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=0 \
+CUDA_VISIBLE_DEVICES=3 \
 python dist_train.py \
 --config configs/train_skt.yaml \
---name nturgbd60 --tag wd1e-3-resume --port '12355'
+--name nturgbd60 --tag lrcos-nowd --port '12355'

@@ -3,10 +3,13 @@ import time
 import random
 import shutil
 import sys
+import math
 
 import torch
 from torch.optim import SGD, Adam, AdamW
 import numpy as np
+from torch.optim import lr_scheduler
+from torch.optim.lr_scheduler import MultiStepLR
 
 
 class Averager():
@@ -119,3 +122,28 @@ def make_optimizer(param_list, optimizer_spec, load_sd=False):
     if load_sd:
         optimizer.load_state_dict(optimizer_spec['sd'])
     return optimizer
+
+    
+class CosineDecayWithWarmup(lr_scheduler._LRScheduler):
+    def __init__(self, optimizer, warmup_epochs, max_epochs, base_lr, min_lr=0):
+        self.warmup_epochs = warmup_epochs
+        self.max_epochs = max_epochs
+        self.base_lr = base_lr
+        self.min_lr = min_lr
+        super().__init__(optimizer)
+
+    def get_lr(self):
+        if self.last_epoch < self.warmup_epochs:
+            return [self.base_lr * (1 + self.last_epoch) / self.warmup_epochs]
+        else:
+            progress = (self.last_epoch - self.warmup_epochs) / (self.max_epochs - self.warmup_epochs)
+            return [self.min_lr + 0.5 * (self.base_lr - self.min_lr) * (1 + math.cos(math.pi * progress))]
+
+
+def make_lr_scheduler(optimizer, scheduler_spec):
+    Scheduler = {
+        'MultiStepLr': MultiStepLR,
+        'CosineDecayWithWarmup': CosineDecayWithWarmup,
+    }[scheduler_spec['name']]
+    scheduler = Scheduler(optimizer, **scheduler_spec['args'])
+    return scheduler

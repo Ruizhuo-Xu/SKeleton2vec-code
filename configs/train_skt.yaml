@@ -48,19 +48,22 @@ model:
     # drop_p: 0.5
     # forward_drop_p: 0.5
   
-resume: save/nturgbd60_wd1e-3/epoch-last.pth
+# resume: save/nturgbd60_wd1e-3/epoch-last.pth
 
 optimizer:
   name: adam
   args:
-    lr: 1.e-4
+    lr: 3.e-4
     weight_decay: 1.e-3
 epoch_max: 100
-# multi_step_lr:
-  # milestones: [200, 400, 600, 800]
-  # milestones: [20, 40, 60, 80]
-  # milestones: [250]
-  # gamma: 0.5
+
+lr_scheduler:
+  name: CosineDecayWithWarmup
+  args:
+    warmup_epochs: 5
+    max_epochs: 100
+    base_lr: 1.e-4
+    min_lr: 1.e-6
 
 epoch_val: 1
 epoch_save: 200
