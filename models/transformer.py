@@ -1,3 +1,14 @@
+# This file includes code from the <ViT> project
+# Original source code can be found at <https://github.com/FrancescoSaverioZuppichini/ViT>
+
+# Code obtained from <https://github.com/FrancescoSaverioZuppichini/ViT/blob/main/transfomer.md>
+# Author: <FrancescoSaverioZuppichini>
+
+# Code modifications:
+# <Adapted skeleton data>
+
+import pdb
+
 import torch
 from torch import Tensor
 from torch import nn
@@ -6,6 +17,7 @@ from einops import rearrange, reduce, repeat
 from einops.layers.torch import Rearrange, Reduce
 from torchinfo import summary
 
+import models
 from .models import register
 
 
@@ -34,7 +46,9 @@ class JointEmbedding(nn.Module):
     
     
 class MultiHeadAttention(nn.Module):
-    def __init__(self, emb_size: int = 768, num_heads: int = 8, dropout: float = 0):
+    def __init__(self, emb_size: int = 768,
+                 num_heads: int = 8,
+                 dropout: float = 0):
         super().__init__()
         self.emb_size = emb_size
         self.num_heads = num_heads
@@ -109,9 +123,25 @@ class TransformerEncoderBlock(nn.Sequential):
             ))
 
 
-class TransformerEncoder(nn.Sequential):
+class TransformerEncoder(nn.Module):
     def __init__(self, depth: int = 8, **kwargs):
-        super().__init__(*[TransformerEncoderBlock(**kwargs) for _ in range(depth)])
+        super().__init__()
+        self.layers = nn.ModuleList([TransformerEncoderBlock(**kwargs) for _ in range(depth)])
+
+    def forward(self, x, output_hidden_states: bool = True):
+        all_hidden_states = (x,) if output_hidden_states else None
+        for layer in self.layers:
+            x = layer(x)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (x,)
+        
+        outputs = (x,) + all_hidden_states if output_hidden_states else (x,)
+        return outputs
+
+
+# class TransformerEncoder(nn.Sequential):
+#     def __init__(self, depth: int = 8, **kwargs):
+#         super().__init__(*[TransformerEncoderBlock(**kwargs) for _ in range(depth)])
                 
 
 class ClassificationHead(nn.Sequential):
@@ -124,8 +154,30 @@ class ClassificationHead(nn.Sequential):
             nn.Linear(emb_size, n_classes))
 
 
+# @register('SkT')
+# class SkT(nn.Sequential):
+#     def __init__(self,     
+#                 in_channels: int = 3,
+#                 temporal_segment_size: int = 4,
+#                 spatio_size: int = 25,
+#                 temporal_size: int = 120,
+#                 emb_size: int = 256,
+#                 depth: int = 12,
+#                 n_classes: int = 120,
+#                 num_person: int = 2,
+#                 drop_p: float = 0.,
+#                 forward_drop_p: float = 0.,
+#                 **kwargs):
+#         super().__init__(
+#             JointEmbedding(in_channels, temporal_segment_size,
+#                            spatio_size, temporal_size, emb_size),
+#             TransformerEncoder(depth, emb_size=emb_size, **kwargs),
+#             ClassificationHead(emb_size, n_classes, num_person)
+#         )
+        
+
 @register('SkT')
-class SkT(nn.Sequential):
+class SkT(nn.Module):
     def __init__(self,     
                 in_channels: int = 3,
                 temporal_segment_size: int = 4,
@@ -133,18 +185,43 @@ class SkT(nn.Sequential):
                 temporal_size: int = 120,
                 emb_size: int = 256,
                 depth: int = 12,
-                n_classes: int = 120,
-                num_person: int = 2,
                 drop_p: float = 0.,
                 forward_drop_p: float = 0.,
                 **kwargs):
-        super().__init__(
-            JointEmbedding(in_channels, temporal_segment_size,
-                           spatio_size, temporal_size, emb_size),
-            TransformerEncoder(depth, emb_size=emb_size, **kwargs),
-            ClassificationHead(emb_size, n_classes, num_person)
-        )
+        super().__init__()
+        self.emb_size = emb_size
+        self.embedding = JointEmbedding(in_channels, temporal_segment_size,
+                        spatio_size, temporal_size, emb_size)
+        self.encoder = TransformerEncoder(depth, emb_size=emb_size,
+                                          drop_p=drop_p,
+                                          forward_drop_p=forward_drop_p,
+                                          **kwargs)
+    
+    def forward(self, x: torch.Tensor, output_hidden_states: bool = True):
+        x = self.embedding(x)
+        encoder_ouputs = self.encoder(x, output_hidden_states=output_hidden_states)
+        return {
+            'last_hidden_state': encoder_ouputs[0],
+            'hidden_states': encoder_ouputs[1:] if output_hidden_states else None,
+        }
+
         
+@register('SkTForClassification')
+class SkTForClassification(nn.Module):
+    def __init__(self, model_spec: dict,
+                 num_classes: int = 120,
+                 num_person: int = 2):
+        super().__init__()
+        self.model = models.make(model_spec)
+        self.emb_size = self.model.emb_size
+        self.cls_head = ClassificationHead(self.emb_size, num_classes, num_person)
+
+    def forward(self, x: torch.Tensor):
+        out = self.model(x)
+        hidden_state = out['last_hidden_state']
+        cls_head_out = self.cls_head(hidden_state)
+        return cls_head_out
+
 
 if __name__ == '__main__':
-    summary(SkT(), (1, 2, 120, 25, 3), device='cpu')
+    summary(SkTForClassification(SkT()), (1, 2, 120, 25, 3), device='cpu')
