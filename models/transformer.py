@@ -135,6 +135,8 @@ class SkT(nn.Sequential):
                 depth: int = 12,
                 n_classes: int = 120,
                 num_person: int = 2,
+                drop_p: float = 0.,
+                forward_drop_p: float = 0.,
                 **kwargs):
         super().__init__(
             JointEmbedding(in_channels, temporal_segment_size,

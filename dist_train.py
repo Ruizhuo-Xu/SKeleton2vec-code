@@ -21,14 +21,14 @@ import models
 import utils
 
 
-def ddp_setup(rank, world_size):
+def ddp_setup(rank, world_size, port='12355'):
     """
     Args:
         rank: Unique identifier of each process
         world_size: Total number of processes
     """
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
+    os.environ["MASTER_PORT"] = port
     init_process_group(backend="nccl", rank=rank, world_size=world_size)
     torch.cuda.set_device(rank)
 
@@ -69,6 +69,7 @@ def make_data_loaders():
     
 def prepare_training():
     if config.get('resume') is not None:
+        log('resume from the ckp: ' + config['resume'])
         sv_file = torch.load(config['resume'])
         model = models.make(sv_file['model'], load_sd=True).cuda()
         optimizer = utils.make_optimizer(
@@ -78,8 +79,8 @@ def prepare_training():
             lr_scheduler = None
         else:
             lr_scheduler = MultiStepLR(optimizer, **config['multi_step_lr'])
-        for _ in range(epoch_start - 1):
-            lr_scheduler.step()
+            for _ in range(epoch_start - 1):
+                lr_scheduler.step()
     else:
         model = models.make(config['model']).cuda()
         optimizer = utils.make_optimizer(
@@ -152,9 +153,9 @@ def validate(val_loader, model):
         
 
 
-def main(rank, world_size, config_, save_path):
+def main(rank, world_size, config_, save_path, port='12355'):
     global config, log
-    ddp_setup(rank, world_size)
+    ddp_setup(rank, world_size, port)
     config = config_
     if rank == 0:
         save_name = save_path.split('/')[-1]
@@ -246,6 +247,7 @@ if __name__ == "__main__":
     parser.add_argument('--name', default=None)
     parser.add_argument('--tag', default=None)
     parser.add_argument('--gpu', default='0')
+    parser.add_argument('--port', default='12355')
     args = parser.parse_args()
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -262,5 +264,5 @@ if __name__ == "__main__":
     save_path = os.path.join('./save', save_name)
 
     world_size = torch.cuda.device_count()
-    mp.spawn(main, args=(world_size, config, save_path), nprocs=world_size)
+    mp.spawn(main, args=(world_size, config, save_path, args.port), nprocs=world_size)
 
