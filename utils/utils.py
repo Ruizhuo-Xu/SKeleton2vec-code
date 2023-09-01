@@ -24,7 +24,7 @@ class Averager():
         self.n += n
 
     def item(self):
-        return self.v / self.n
+        return self.v / (self.n + 1e-6)
 
 
 class Accuracy():
@@ -125,18 +125,28 @@ def make_optimizer(param_list, optimizer_spec, load_sd=False):
 
     
 class CosineDecayWithWarmup(lr_scheduler._LRScheduler):
-    def __init__(self, optimizer, warmup_epochs, max_epochs, base_lr, min_lr=0):
+    def __init__(self,
+                 optimizer,
+                 warmup_epochs,
+                 max_epochs,
+                 base_lr,
+                 mode = 'epoch',
+                 min_lr=0):
+        assert mode in ['epoch', 'step']
         self.warmup_epochs = warmup_epochs
         self.max_epochs = max_epochs
         self.base_lr = base_lr
+        self.mode = mode
+        self.epoch_offset = 1 if self.mode == 'epoch' else 0
         self.min_lr = min_lr
         super().__init__(optimizer)
 
     def get_lr(self):
         if self.last_epoch < self.warmup_epochs:
-            return [self.base_lr * (1 + self.last_epoch) / self.warmup_epochs]
+            return [self.base_lr * (self.epoch_offset + self.last_epoch) / self.warmup_epochs]
         else:
-            progress = (self.last_epoch - self.warmup_epochs) / (self.max_epochs - self.warmup_epochs)
+            progress = ((self.epoch_offset + self.last_epoch - self.warmup_epochs)
+                        / (self.max_epochs - self.warmup_epochs))
             return [self.min_lr + 0.5 * (self.base_lr - self.min_lr) * (1 + math.cos(math.pi * progress))]
 
 

@@ -16,8 +16,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import wandb
 
-import datasets
-import models
+from datasets import datasets
+from models import models
 import utils
 
 
@@ -93,48 +93,57 @@ def prepare_training():
 
     if dist.get_rank() == 0:
         log('model: #params={}'.format(utils.compute_num_params(model, text=True)))
+        log(model)
     return model, optimizer, epoch_start, lr_scheduler
 
 
-def train(train_loader, model, optimizer):
+def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
     model.train()
     loss_fn = nn.CrossEntropyLoss()
     train_loss = utils.Averager()
     train_acc = utils.Accuracy()
 
-    for batch in tqdm(train_loader, leave=False, desc='train'):
-        for k, v in batch.items():
-            batch[k] = v.cuda()
+    with tqdm(train_loader,leave=False, desc='train') as t:
+        for iter_step, batch in enumerate(t):
+            if lr_scheduler is not None and lr_scheduler.mode == 'step':
+                lr_scheduler.step(iter_step / len(train_loader) + epoch)
+            for k, v in batch.items():
+                batch[k] = v.cuda()
 
-        inp = batch['keypoint']
-        # num_clips == 1
-        assert inp.shape[1] == 1
-        inp = inp[:, 0]
-        labels = batch['label'].squeeze(-1)
-        logits = model(inp)
-        # pdb.set_trace()
-        loss = loss_fn(logits, labels)
-        preds = logits.argmax(dim=1)
-        train_loss.add(loss.item())
-        train_acc.add(preds, labels)
+            inp = batch['keypoint']
+            # num_clips == 1
+            assert inp.shape[1] == 1
+            inp = inp[:, 0]
+            labels = batch['label'].squeeze(-1)
+            logits = model(inp)
+            # pdb.set_trace()
+            loss = loss_fn(logits, labels)
+            preds = logits.argmax(dim=1)
+            train_loss.add(loss.item())
+            train_acc.add(preds, labels)
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-        preds = None; loss = None
+            current_lr = optimizer.param_groups[0]['lr']
+            tqdm.set_postfix(t, {'loss': train_loss.item(),
+                                 'lr': current_lr,
+                                 'train_acc': train_acc.item()})
+
+            preds = None; loss = None
 
     return train_loss, train_acc
 
-
+@torch.no_grad()
 def validate(val_loader, model):
     model.eval()
     loss_fn = nn.CrossEntropyLoss()
     val_loss = utils.Averager()
     val_acc = utils.Accuracy()
 
-    with torch.no_grad():
-        for batch in tqdm(val_loader, leave=False, desc='val'):
+    with tqdm(val_loader, leave=False, desc='val') as t:
+        for batch in t:
             for k, v in batch.items():
                 batch[k] = v.cuda()
             inp = batch['keypoint']
@@ -148,6 +157,9 @@ def validate(val_loader, model):
             val_loss.add(loss.item())
             val_acc.add(preds, labels)
             preds = None; loss = None
+            tqdm.set_postfix(t, {
+                'loss': val_loss.item(),
+                'val_acc': val_acc.item()})
 
     return val_loss, val_acc
         
@@ -182,9 +194,10 @@ def main(rank, world_size, config_, save_path, port='12355'):
         t_epoch_start = timer.t()
         log_info = ['epoch {}/{}'.format(epoch, epoch_max)]
         train_loader.sampler.set_epoch(epoch)
-        train_loss, train_acc = train(train_loader, model, optimizer)
+        train_loss, train_acc = train(train_loader, model, optimizer,
+                                      epoch - 1, lr_scheduler)
         current_lr = optimizer.param_groups[0]['lr']
-        if lr_scheduler is not None:
+        if lr_scheduler is not None and lr_scheduler.mode == 'epoch':
             lr_scheduler.step()
         v = ddp_reduce(train_loss.v)
         n = ddp_reduce(train_loss.n)

@@ -17,8 +17,8 @@ from einops import rearrange, reduce, repeat
 from einops.layers.torch import Rearrange, Reduce
 from torchinfo import summary
 
-import models
-from .models import register
+from . import models
+from .drop import DropPath
 
 
 class JointEmbedding(nn.Module):
@@ -48,14 +48,14 @@ class JointEmbedding(nn.Module):
 class MultiHeadAttention(nn.Module):
     def __init__(self, emb_size: int = 768,
                  num_heads: int = 8,
-                 dropout: float = 0):
+                 att_drop: float = 0):
         super().__init__()
         self.emb_size = emb_size
         self.num_heads = num_heads
         self.keys = nn.Linear(emb_size, emb_size)
         self.queries = nn.Linear(emb_size, emb_size)
         self.values = nn.Linear(emb_size, emb_size)
-        self.att_drop = nn.Dropout(dropout)
+        self.att_drop = nn.Dropout(att_drop)
         self.projection = nn.Linear(emb_size, emb_size)
         self.scaling = (self.emb_size // num_heads) ** -0.5
 
@@ -104,29 +104,36 @@ class FeedForwardBlock(nn.Sequential):
 class TransformerEncoderBlock(nn.Sequential):
     def __init__(self,
                  emb_size: int = 256,
-                 drop_p: float = 0.,
+                 att_drop_p: float = 0.,
                  forward_expansion: int = 4,
                  forward_drop_p: float = 0.,
+                 drop_path_p: float = 0.,
                  ** kwargs):
         super().__init__(
             ResidualAdd(nn.Sequential(
                 nn.LayerNorm(emb_size),
-                MultiHeadAttention(emb_size, **kwargs),
-                nn.Dropout(drop_p)
+                MultiHeadAttention(emb_size, att_drop=att_drop_p, **kwargs),
+                nn.Dropout(forward_drop_p),
+                DropPath(drop_path_p)
             )),
             ResidualAdd(nn.Sequential(
                 nn.LayerNorm(emb_size),
                 FeedForwardBlock(
                     emb_size, expansion=forward_expansion, drop_p=forward_drop_p),
-                nn.Dropout(drop_p)
+                nn.Dropout(forward_drop_p),
+                DropPath(drop_path_p)
             )
             ))
 
 
 class TransformerEncoder(nn.Module):
-    def __init__(self, depth: int = 8, **kwargs):
+    def __init__(self, depth: int = 8, drop_path_p: float = 0., **kwargs):
         super().__init__()
-        self.layers = nn.ModuleList([TransformerEncoderBlock(**kwargs) for _ in range(depth)])
+        dpr = [x.item() for x in torch.linspace(0, drop_path_p, depth)]  # stochastic depth decay rule
+        self.layers = nn.ModuleList([
+            TransformerEncoderBlock(
+                drop_path_p=dpr[i], **kwargs)
+             for i in range(depth)])
 
     def forward(self, x, output_hidden_states: bool = True):
         all_hidden_states = (x,) if output_hidden_states else None
@@ -137,46 +144,43 @@ class TransformerEncoder(nn.Module):
         
         outputs = (x,) + all_hidden_states if output_hidden_states else (x,)
         return outputs
-
-
-# class TransformerEncoder(nn.Sequential):
-#     def __init__(self, depth: int = 8, **kwargs):
-#         super().__init__(*[TransformerEncoderBlock(**kwargs) for _ in range(depth)])
                 
 
-class ClassificationHead(nn.Sequential):
+@models.register('ClassificationHeadLight')
+class ClassificationHeadLight(nn.Sequential):
     def __init__(self, emb_size: int = 256, n_classes: int = 120,
-                 num_person: int = 2):
+                 num_person: int = 2, drop_p: float = 0.):
         super().__init__(
+            nn.LayerNorm(emb_size), 
             Rearrange('(b m) n e -> b m n e', m=num_person),
             Reduce('b m n e -> b e', reduction='mean'),
-            nn.LayerNorm(emb_size), 
+            nn.Dropout(drop_p),
             nn.Linear(emb_size, n_classes))
 
 
-# @register('SkT')
-# class SkT(nn.Sequential):
-#     def __init__(self,     
-#                 in_channels: int = 3,
-#                 temporal_segment_size: int = 4,
-#                 spatio_size: int = 25,
-#                 temporal_size: int = 120,
-#                 emb_size: int = 256,
-#                 depth: int = 12,
-#                 n_classes: int = 120,
-#                 num_person: int = 2,
-#                 drop_p: float = 0.,
-#                 forward_drop_p: float = 0.,
-#                 **kwargs):
-#         super().__init__(
-#             JointEmbedding(in_channels, temporal_segment_size,
-#                            spatio_size, temporal_size, emb_size),
-#             TransformerEncoder(depth, emb_size=emb_size, **kwargs),
-#             ClassificationHead(emb_size, n_classes, num_person)
-#         )
-        
+@models.register('ClassificationHeadLarge')
+class ClassificationHeadLarge(nn.Sequential):
+    def __init__(self, emb_size: int = 256,
+                 n_classes: int = 120,
+                 hidden_dim: int = 2048,
+                 num_persons: int = 2,
+                 num_joints: int = 25,
+                 drop_p: float = 0.):
+        super().__init__(
+            nn.LayerNorm(emb_size), 
+            nn.Dropout(drop_p),
+            Rearrange('(B M) (T J) C -> B M T J C', M=num_persons, J=num_joints),
+            Reduce('B M T J C -> B M J C', reduction='mean'),
+            Rearrange('B M J C -> B M (J C)'),
+            Reduce('B M C -> B C', reduction='mean'),
+            nn.Linear(emb_size*num_joints, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_dim, n_classes)
+        )
 
-@register('SkT')
+
+@models.register('SkT')
 class SkT(nn.Module):
     def __init__(self,     
                 in_channels: int = 3,
@@ -185,15 +189,20 @@ class SkT(nn.Module):
                 temporal_size: int = 120,
                 emb_size: int = 256,
                 depth: int = 12,
-                drop_p: float = 0.,
+                num_heads: int = 8,
+                att_drop_p: float = 0.,
                 forward_drop_p: float = 0.,
+                drop_path_p: float = 0.,
                 **kwargs):
         super().__init__()
         self.emb_size = emb_size
         self.embedding = JointEmbedding(in_channels, temporal_segment_size,
                         spatio_size, temporal_size, emb_size)
-        self.encoder = TransformerEncoder(depth, emb_size=emb_size,
-                                          drop_p=drop_p,
+        self.encoder = TransformerEncoder(depth,
+                                          drop_path_p,
+                                          emb_size=emb_size,
+                                          num_heads=num_heads,
+                                          att_drop_p=att_drop_p,
                                           forward_drop_p=forward_drop_p,
                                           **kwargs)
     
@@ -206,18 +215,21 @@ class SkT(nn.Module):
         }
 
         
-@register('SkTForClassification')
+@models.register('SkTForClassification')
 class SkTForClassification(nn.Module):
-    def __init__(self, model_spec: dict,
-                 num_classes: int = 120,
-                 num_person: int = 2):
+    def __init__(self,
+                 encoder_spec: dict,
+                 cls_head_spec: dict,
+                 ):
         super().__init__()
-        self.model = models.make(model_spec)
-        self.emb_size = self.model.emb_size
-        self.cls_head = ClassificationHead(self.emb_size, num_classes, num_person)
+        self.encoder = models.make(encoder_spec)
+        self.emb_size = self.encoder.emb_size
+
+        self.cls_head = models.make(cls_head_spec,
+                                    args={'emb_size': self.emb_size})
 
     def forward(self, x: torch.Tensor):
-        out = self.model(x)
+        out = self.encoder(x)
         hidden_state = out['last_hidden_state']
         cls_head_out = self.cls_head(hidden_state)
         return cls_head_out

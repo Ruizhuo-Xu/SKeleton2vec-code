@@ -1,10 +1,10 @@
 import numpy as np
 from .formatting import Rename
 from .compose import Compose
-from .pipelines import register
+from . import pipelines
 
 
-@register('PreNormalize3D')
+@pipelines.register('PreNormalize3D')
 class PreNormalize3D:
     """PreNormalize for NTURGB+D 3D keypoints (x, y, z). Codes adapted from https://github.com/lshiwjx/2s-AGCN. """
 
@@ -96,7 +96,7 @@ class PreNormalize3D:
         return results
 
 
-@register('RandomRot')
+@pipelines.register('RandomRot')
 class RandomRot:
 
     def __init__(self, theta=0.3):
@@ -134,7 +134,7 @@ class RandomRot:
         return results
 
 
-@register('MergeSkeFeat')
+@pipelines.register('MergeSkeFeat')
 class MergeSkeFeat:
     def __init__(self, feat_list=['keypoint'], target='keypoint', axis=-1):
         """Merge different feats (ndarray) by concatenate them in the last axis. """
@@ -152,7 +152,7 @@ class MergeSkeFeat:
         return results
 
 
-@register('GenSkeFeat')
+@pipelines.register('GenSkeFeat')
 class GenSkeFeat:
     def __init__(self, dataset='nturgb+d', feats=['j'], axis=-1):
         self.dataset = dataset
@@ -179,7 +179,7 @@ class GenSkeFeat:
         return self.ops(results)
 
 
-@register('FormatGCNInput')
+@pipelines.register('FormatGCNInput')
 class FormatGCNInput:
     """Format final skeleton shape to the given input_format. """
 
