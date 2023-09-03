@@ -15,6 +15,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import wandb
+from timm.loss import LabelSmoothingCrossEntropy
 
 from datasets import datasets
 from models import models
@@ -99,7 +100,13 @@ def prepare_training():
 
 def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
     model.train()
-    loss_fn = nn.CrossEntropyLoss()
+    if config['label_smoothing'] > 0.:
+        smoothing = config['label_smoothing']
+        loss_fn = LabelSmoothingCrossEntropy(smoothing=smoothing)
+        if dist.get_rank() == 0:
+            log(f'Using LabelSmoothingCrossEntropy Loss, smoothing:{smoothing}')
+    else:
+        loss_fn = nn.CrossEntropyLoss()
     train_loss = utils.Averager()
     train_acc = utils.Accuracy()
 

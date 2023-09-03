@@ -15,7 +15,7 @@ train_dataset:
       split: xsub_train
       # first_k: 100
   batch_size: 32
-  num_workers: 8
+  num_workers: 0
 
 val_dataset:
   dataset:
@@ -32,7 +32,7 @@ val_dataset:
       ]
       split: xsub_val
   batch_size: 32
-  num_workers: 8
+  num_workers: 0
 
 model:
   name: SkTForClassification
@@ -49,7 +49,7 @@ model:
         num_heads: 8
         att_drop_p: 0.
         forward_drop_p: 0.
-        drop_path_p: 0.3
+        drop_path_p: 0.
     cls_head_spec:
       name: ClassificationHeadLarge
       args:
@@ -63,7 +63,7 @@ model:
 # resume: save/nturgbd60_wd1e-3/epoch-last.pth
 
 optimizer:
-  name: adam
+  name: adamw
   args:
     lr: 3.e-4
     weight_decay: 5.e-2
@@ -78,5 +78,6 @@ lr_scheduler:
     min_lr: 1.e-5
     mode: step
 
+label_smoothing: 0.1
 epoch_val: 1
 epoch_save: 200
