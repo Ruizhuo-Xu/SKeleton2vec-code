@@ -58,12 +58,6 @@ model:
         num_persons: 2
         num_joints: 25
         drop_p: 0.3
-    # cls_head_spec:
-    #   name: ClassificationHeadLight
-    #   args:
-    #     n_classes: 60
-    #     num_persons: 2
-    #     drop_p: 0.3
     
   
 # resume: save/nturgbd60_wd1e-3/epoch-last.pth

@@ -211,10 +211,10 @@ class TransformerEncoder(nn.Module):
 @models.register('ClassificationHeadLight')
 class ClassificationHeadLight(nn.Sequential):
     def __init__(self, emb_size: int = 256, n_classes: int = 120,
-                 num_person: int = 2, drop_p: float = 0.):
+                 num_persons: int = 2, drop_p: float = 0.):
         super().__init__(
             nn.LayerNorm(emb_size), 
-            Rearrange('(b m) n e -> b m n e', m=num_person),
+            Rearrange('(b m) n e -> b m n e', m=num_persons),
             Reduce('b m n e -> b e', reduction='mean'),
             nn.Dropout(drop_p),
             nn.Linear(emb_size, n_classes))
@@ -289,7 +289,7 @@ class SkTForClassification(nn.Module):
 
         self.cls_head = models.make(cls_head_spec,
                                     args={'emb_size': self.emb_size})
-        self.apply(self._init_weights)
+        # self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
