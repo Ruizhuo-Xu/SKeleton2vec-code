@@ -10,8 +10,11 @@ import copy
 import torch
 import torch.nn as nn
 
+from . import models
 
-class EMA:
+
+@models.register("ema")
+class EMA(nn.Module):
     """
     Modified version of class fairseq.models.ema.EMAModule.
 
@@ -22,15 +25,23 @@ class EMA:
         skip_keys (list): The keys to skip assigning averaged weights to.
     """
 
-    def __init__(self, model: nn.Module, cfg, skip_keys=None):
+    def __init__(self, model: nn.Module,
+                 ema_decay,
+                 ema_end_decay,
+                 ema_anneal_end_step,
+                 skip_keys=None,
+                 **kwargs):
+        super().__init__()
         self.model = self.deepcopy_model(model)
         self.model.requires_grad_(False)
-        self.cfg = cfg
+        # self.cfg = cfg
         # TODO: modify
-        self.device = cfg.device
-        self.model.to(self.device)
+        # self.device = device
+        # self.model.to(self.device)
         self.skip_keys = skip_keys or set()
-        self.decay = self.cfg.model.ema_decay
+        self.decay = ema_decay
+        self.ema_end_decay = ema_end_decay
+        self.ema_anneal_end_step = ema_anneal_end_step
         self.num_updates = 0
 
     @staticmethod
@@ -65,6 +76,9 @@ class EMA:
             ema_state_dict[key] = ema_param
         self.model.load_state_dict(ema_state_dict, strict=False)
         self.num_updates += 1
+
+    def forward(self, new_model):
+        self.step(new_model)
 
     def restore(self, model: nn.Module):
         """

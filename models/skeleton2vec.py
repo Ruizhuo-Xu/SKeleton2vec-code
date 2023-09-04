@@ -1,9 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchinfo import summary
+
 from .ema import EMA
+from . import models
 
 
+@models.register('Skeleton2Vec')
 class Skeleton2Vec(nn.Module):
     """
     Data2Vec main module.
@@ -12,23 +16,23 @@ class Skeleton2Vec(nn.Module):
          encoder (nn.Module): The encoder module like BEiT, ViT, etc.
          cfg (omegaconf.DictConfig): The config containing model properties
     """
-    # MODALITIES = ['vision', 'text', 'audio']
 
-    def __init__(self, encoder, cfg, **kwargs):
+    def __init__(self, encoder_spec, ema_spec,
+                 average_top_k_layers,
+                 normalize_targets=True,
+                 **kwargs):
         super(Skeleton2Vec, self).__init__()
-        # self.modality = cfg.modality
-        self.embed_dim = cfg.model.embed_dim
-        self.encoder = encoder
+        self.encoder = models.make(encoder_spec)
+        self.embed_dim = self.encoder.emb_size
+        self.average_top_k_layers = average_top_k_layers
+        self.normalize_targets = normalize_targets
         self.__dict__.update(kwargs)
 
-        self.cfg = cfg
-        self.ema = EMA(self.encoder, cfg)  # EMA acts as the teacher
         self.regression_head = self._build_regression_head()
-
-        self.cfg = cfg
-        self.ema_decay = self.cfg.model.ema_decay
-        self.ema_end_decay = self.cfg.model.ema_end_decay
-        self.ema_anneal_end_step = self.cfg.model.ema_anneal_end_step
+        self.ema = models.make(ema_spec, args={'model': self.encoder})  # EMA acts as the teacher
+        self.ema_decay = self.ema.decay
+        self.ema_end_decay = self.ema.ema_end_decay
+        self.ema_anneal_end_step = self.ema.ema_anneal_end_step
 
     def _build_regression_head(self):
         """
@@ -66,7 +70,7 @@ class Skeleton2Vec(nn.Module):
                 )
             self.ema.decay = decay
         if self.ema.decay < 1:
-            self.ema.step(self.encoder)
+            self.ema(self.encoder)
 
     def forward(self, src, trg=None, mask=None, **kwargs):
         """
@@ -83,20 +87,21 @@ class Skeleton2Vec(nn.Module):
 
         """
         # model forward in online mode (student)
-        x = self.encoder(src, mask, **kwargs)['encoder_out']  # fetch the last layer outputs
+        # x = self.encoder(src, mask, **kwargs)['encoder_out']  # fetch the last layer outputs
+        x = self.encoder(src, **kwargs)['last_hidden_state']  # fetch the last layer outputs
         if trg is None:
             return x
 
         # model forward in offline mode (teacher)
         with torch.no_grad():
             self.ema.model.eval()
-            y = self.ema.model(trg, ~mask, **kwargs)['encoder_states']  # fetch the last transformer layers outputs
-            y = y[-self.cfg.model.average_top_k_layers:]  # take the last k transformer layers
+            y = self.ema.model(trg, **kwargs)['hidden_states']  # fetch the last transformer layers outputs
+            y = y[-self.average_top_k_layers:]  # take the last k transformer layers
 
             # Follow the same layer normalization procedure for text and vision
             y = [F.layer_norm(tl.float(), tl.shape[-1:]) for tl in y]
             y = sum(y) / len(y)
-            if self.cfg.model.normalize_targets:
+            if self.normalize_targets:
                 y = F.layer_norm(y.float(), y.shape[-1:])
             """
             if self.modality in ['vision', 'text']:
@@ -119,3 +124,28 @@ class Skeleton2Vec(nn.Module):
         x = self.regression_head(x)
 
         return x, y
+
+
+if __name__ == '__main__':
+    encoder_spec = {
+        'name': 'SkT',
+        'args': {
+            'depth': 8
+        }
+    }
+    ema_epce = {
+        'name': 'ema',
+        'args': {
+            'ema_decay': 0.9998,
+            'ema_end_decay': 0.9999,
+            'ema_anneal_end_step': 300000
+        }
+    }
+    model = Skeleton2Vec(encoder_spec, ema_epce, 4)
+    src = torch.randn(3, 2, 120, 25, 3) # B N C
+    trg = torch.randn(3, 2, 120, 25, 3) # B N C
+    mask = torch.randint(0, 2, (6, 750)).bool()
+    inp_data = [src, trg, mask]
+    # x, y = model(*inp_data)
+    # print(x.shape, y.shape)
+    summary(model, input_data=inp_data)
