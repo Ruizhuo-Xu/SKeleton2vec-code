@@ -13,7 +13,7 @@ import torch.nn as nn
 from . import models
 
 
-@models.register("ema")
+@models.register("EMA")
 class EMA(nn.Module):
     """
     Modified version of class fairseq.models.ema.EMAModule.
@@ -35,7 +35,6 @@ class EMA(nn.Module):
         self.model = self.deepcopy_model(model)
         self.model.requires_grad_(False)
         # self.cfg = cfg
-        # TODO: modify
         # self.device = device
         # self.model.to(self.device)
         self.skip_keys = skip_keys or set()
@@ -94,8 +93,8 @@ class EMA(nn.Module):
         model.load_state_dict(d, strict=False)
         return model
 
-    def state_dict(self):
-        return self.model.state_dict()
+    # def state_dict(self):
+    #     return self.model.state_dict()
 
     @staticmethod
     def get_annealed_rate(start, end, curr_step, total_steps):

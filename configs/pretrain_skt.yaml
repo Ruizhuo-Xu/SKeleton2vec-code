@@ -1,0 +1,94 @@
+train_dataset:
+  dataset:
+    name: PoseDataset
+    args:
+      anno_file: data/nturgbd/ntu60_3danno.pkl
+      pipelines: [
+        {name: PreNormalize3D, args: {}},
+        {name: RandomRot, args: {theta: 0.2}},
+        {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
+        {name: UniformSampleDecode, args: {clip_len: 120}},
+        {name: FormatGCNInput, args: {}},
+        {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
+        {name: ToTensor, args: {keys: [keypoint, label]}},
+      ]
+      split: xsub_train
+      # first_k: 100
+  pretrain:
+    name: PretrainDataset
+    args:
+      mask_ratio: 0.6
+      mask_strategy: 'random'
+      temporal_mask_segment_size: 4
+  batch_size: 32
+  num_workers: 8
+
+val_dataset:
+  dataset:
+    name: PoseDataset
+    args:
+      anno_file: data/nturgbd/ntu60_3danno.pkl
+      pipelines: [
+        {name: PreNormalize3D, args: {}},
+        {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
+        {name: UniformSampleDecode, args: {clip_len: 120}},
+        {name: FormatGCNInput, args: {}},
+        {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
+        {name: ToTensor, args: {keys: [keypoint, label]}},
+      ]
+      split: xsub_val
+  pretrain:
+    name: PretrainDataset
+    args:
+      mask_ratio: 0.6
+      mask_strategy: 'random'
+      temporal_mask_segment_size: 4
+  batch_size: 32
+  num_workers: 8
+
+model:
+  name: Skeleton2Vec
+  args:
+    encoder_spec:
+      name: SkT
+      args: 
+        in_channels: 3
+        temporal_segment_size: 4
+        spatio_size: 25
+        emb_size: 256
+        depth: 8
+        num_heads: 8
+        att_drop_p: 0.
+        forward_drop_p: 0.
+        drop_path_p: 0.
+    ema_spec:
+      name: EMA
+      args:
+        ema_decay: 0.9998
+        ema_end_decay: 0.9998
+        ema_anneal_end_step: 10000
+    average_top_k_layers: 4
+    normalize_targets: true
+    
+  
+# resume: save/nturgbd60_wd1e-3/epoch-last.pth
+
+optimizer:
+  name: adamw
+  args:
+    lr: 1.e-3
+    weight_decay: 0.
+# smooth_l1_beta: 1.
+epoch_max: 200
+
+lr_scheduler:
+  name: CosineDecayWithWarmup
+  args:
+    warmup_epochs: 10
+    max_epochs: 200
+    base_lr: 1.e-3
+    min_lr: 1.e-5
+    mode: step
+
+epoch_val: 10
+epoch_save: 20

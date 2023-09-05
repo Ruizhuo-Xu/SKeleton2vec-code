@@ -1,7 +1,10 @@
+import pdb
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchinfo import summary
+from einops import rearrange
 
 from .ema import EMA
 from . import models
@@ -24,6 +27,8 @@ class Skeleton2Vec(nn.Module):
         super(Skeleton2Vec, self).__init__()
         self.encoder = models.make(encoder_spec)
         self.embed_dim = self.encoder.emb_size
+        self.temporal_segment_size = self.encoder.embedding.temporal_segment_size
+
         self.average_top_k_layers = average_top_k_layers
         self.normalize_targets = normalize_targets
         self.__dict__.update(kwargs)
@@ -86,6 +91,8 @@ class Skeleton2Vec(nn.Module):
             Either encoder outputs or a tuple of encoder + EMA outputs
 
         """
+        mask = mask[:, :, ::self.temporal_segment_size, :, :]
+        mask = rearrange(mask, 'B M T V 1 -> (B M) (T V)')
         # model forward in online mode (student)
         # x = self.encoder(src, mask, **kwargs)['encoder_out']  # fetch the last layer outputs
         x = self.encoder(src, **kwargs)['last_hidden_state']  # fetch the last layer outputs
