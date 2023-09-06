@@ -70,7 +70,8 @@ def make_data_loaders():
     
 def prepare_training():
     if config.get('resume') is not None:
-        log('resume from the ckp: ' + config['resume'])
+        if dist.get_rank() == 0:
+            log('resume from the ckp: ' + config['resume'])
         sv_file = torch.load(config['resume'])
         model = models.make(sv_file['model'], load_sd=True).cuda()
         optimizer = utils.make_optimizer(
@@ -93,7 +94,8 @@ def prepare_training():
             lr_scheduler = utils.make_lr_scheduler(optimizer, config['lr_scheduler'])
 
     if dist.get_rank() == 0:
-        log('model: #params={}'.format(utils.compute_num_params(model, text=True)))
+        log('model: #total params={}'.format(utils.compute_num_params(model, text=True)))
+        log('model: #train params={}'.format(utils.compute_train_num_params(model, text=True)))
         log(model)
     return model, optimizer, epoch_start, lr_scheduler
 
@@ -103,7 +105,7 @@ def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
     if config['label_smoothing'] > 0.:
         smoothing = config['label_smoothing']
         loss_fn = LabelSmoothingCrossEntropy(smoothing=smoothing)
-        if dist.get_rank() == 0:
+        if dist.get_rank() == 0 and epoch == 0:
             log(f'Using LabelSmoothingCrossEntropy Loss, smoothing:{smoothing}')
     else:
         loss_fn = nn.CrossEntropyLoss()

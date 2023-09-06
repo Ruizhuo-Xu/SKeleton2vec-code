@@ -112,6 +112,17 @@ def compute_num_params(model, text=False):
         return tot
 
 
+def compute_train_num_params(model, text=False):
+    tot = int(sum([np.prod(p.shape) for p in model.parameters() if p.requires_grad]))
+    if text:
+        if tot >= 1e6:
+            return '{:.1f}M'.format(tot / 1e6)
+        else:
+            return '{:.1f}K'.format(tot / 1e3)
+    else:
+        return tot
+
+
 def make_optimizer(param_list, optimizer_spec, load_sd=False):
     Optimizer = {
         'sgd': SGD,

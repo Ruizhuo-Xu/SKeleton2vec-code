@@ -71,7 +71,8 @@ def make_data_loaders():
     
 def prepare_training():
     if config.get('resume') is not None:
-        log('resume from the ckp: ' + config['resume'])
+        if dist.get_rank() == 0:
+            log('resume from the ckp: ' + config['resume'])
         sv_file = torch.load(config['resume'])
         model = models.make(sv_file['model'], load_sd=True).cuda()
         optimizer = utils.make_optimizer(
@@ -107,7 +108,7 @@ def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
         if dist.get_rank() == 0 and epoch == 0:
             log(f'Using SmoothL1 Loss, beta:{beta}')
     else:
-        loss_fn = nn.L1Loss(reduction='none')
+        loss_fn = nn.MSELoss(reduction='none')
     train_loss = utils.Averager()
 
     with tqdm(train_loader,leave=False, desc='train') as t:
@@ -127,7 +128,8 @@ def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
             mask = mask[:, 0]
             x, y = model(src, trg, mask)
             # pdb.set_trace()
-            loss = loss_fn(x.float(), y.float()).sum(dim=-1).sum().div(x.size(0))
+            # loss = loss_fn(x.float(), y.float()).sum(dim=-1).sum().div(x.size(0))
+            loss = loss_fn(x.float(), y.float()).sum(dim=-1).mean()
             train_loss.add(loss.item())
 
             optimizer.zero_grad()
@@ -135,10 +137,12 @@ def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
             optimizer.step()
             # EMA update
             model.module.ema_step()
+            ema_decay = model.module.ema.decay
 
             current_lr = optimizer.param_groups[0]['lr']
             tqdm.set_postfix(t, {'loss': train_loss.item(),
-                                 'lr': current_lr})
+                                 'lr': current_lr,
+                                 'ema_decay': ema_decay})
 
             x = None; y = None; loss = None
 
@@ -151,7 +155,7 @@ def validate(val_loader, model):
         beta = config['smooth_l1_beta']
         loss_fn = nn.SmoothL1Loss(reduction='none', beta=beta)
     else:
-        loss_fn = nn.L1Loss(reduction='none')
+        loss_fn = nn.MSELoss(reduction='none')
     val_loss = utils.Averager()
 
     with tqdm(val_loader, leave=False, desc='val') as t:
@@ -163,9 +167,10 @@ def validate(val_loader, model):
             trg = batch['keypoint']
             mask = batch['mask']
             # num_clips == 1
-            assert src.shape[1] == 1 and trg.shape[1] == 1
+            assert src.shape[1] == 1 and trg.shape[1] == 1 and mask.shape[1] == 1
             src = src[:, 0]
             trg = trg[:, 0]
+            mask = mask[:, 0]
             x, y = model(src, trg, mask)
             # pdb.set_trace()
             loss = loss_fn(x.float(), y.float()).sum(dim=-1).sum().div(x.size(0))
@@ -219,6 +224,7 @@ def main(rank, world_size, config_, save_path, port='12355'):
             # print(v, n, correct_num, total_num)
             train_loss = (v / n)
             log_info.append(f'train: loss={train_loss:.4f}')
+            wandb.log({'train/loss': train_loss}, epoch)
             wandb.log({'train/lr': current_lr}, epoch)
 
         model_spec = config['model']
@@ -245,6 +251,7 @@ def main(rank, world_size, config_, save_path, port='12355'):
                 # print(v, n, correct_num, total_num)
                 val_loss = (v / n)
                 log_info.append(f'val: loss={val_loss:.4f}')
+                wandb.log({'val/loss': val_loss}, epoch)
                 if val_loss < min_val_v:
                     min_val_v = val_loss
                     torch.save(sv_file, os.path.join(save_path, 'epoch-best.pth'))

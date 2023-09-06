@@ -2,17 +2,17 @@ train_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu120_3danno.pkl
+      anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {}},
-        {name: RandomRot, args: {theta: 0.2}},
+        {name: RandomRot, args: {theta: 0.3}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         {name: UniformSampleDecode, args: {clip_len: 120}},
         {name: FormatGCNInput, args: {}},
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
       ]
-      split: xset_train
+      split: xview_train
       # first_k: 100
   batch_size: 32
   num_workers: 8
@@ -21,7 +21,7 @@ val_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu120_3danno.pkl
+      anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
@@ -30,7 +30,7 @@ val_dataset:
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
       ]
-      split: xset_val
+      split: xview_val
   batch_size: 32
   num_workers: 8
 
@@ -53,7 +53,7 @@ model:
     cls_head_spec:
       name: ClassificationHeadLarge
       args:
-        n_classes: 120
+        n_classes: 60
         hidden_dim: 2048
         num_persons: 2
         num_joints: 25

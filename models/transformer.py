@@ -282,14 +282,24 @@ class SkTForClassification(nn.Module):
     def __init__(self,
                  encoder_spec: dict,
                  cls_head_spec: dict,
+                 encoder_pretrain_weight: str = None,
+                 encoder_freeze: bool = False,
                  ):
         super().__init__()
-        self.encoder = models.make(encoder_spec)
+        if encoder_pretrain_weight:
+            sv_file = torch.load(encoder_pretrain_weight)
+            loaded_model = models.make(sv_file['model'], load_sd=True)
+            self.encoder = loaded_model.encoder
+        else:
+            self.encoder = models.make(encoder_spec)
+        if encoder_freeze:
+            self.encoder.requires_grad_(False)
+        self.encoder_freeze = encoder_freeze
         self.emb_size = self.encoder.emb_size
 
         self.cls_head = models.make(cls_head_spec,
                                     args={'emb_size': self.emb_size})
-        # self.apply(self._init_weights)
+        self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):

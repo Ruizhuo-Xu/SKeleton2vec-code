@@ -17,7 +17,7 @@ train_dataset:
   pretrain:
     name: PretrainDataset
     args:
-      mask_ratio: 0.6
+      mask_ratio: 0.8
       mask_strategy: 'random'
       temporal_mask_segment_size: 4
   batch_size: 32
@@ -40,7 +40,7 @@ val_dataset:
   pretrain:
     name: PretrainDataset
     args:
-      mask_ratio: 0.6
+      mask_ratio: 0.8
       mask_strategy: 'random'
       temporal_mask_segment_size: 4
   batch_size: 32
@@ -64,20 +64,20 @@ model:
     ema_spec:
       name: EMA
       args:
-        ema_decay: 0.9998
-        ema_end_decay: 0.9998
-        ema_anneal_end_step: 10000
+        ema_decay: 0.999
+        ema_end_decay: 0.9999
+        ema_anneal_end_step: 36000
     average_top_k_layers: 4
     normalize_targets: true
     
   
-# resume: save/nturgbd60_wd1e-3/epoch-last.pth
+# resume: save/nturgbd60_pretrain_test_bz64/epoch-last.pth
 
 optimizer:
   name: adamw
   args:
     lr: 1.e-3
-    weight_decay: 0.
+    weight_decay: 1.e-2
 # smooth_l1_beta: 1.
 epoch_max: 200
 
@@ -86,7 +86,7 @@ lr_scheduler:
   args:
     warmup_epochs: 10
     max_epochs: 200
-    base_lr: 1.e-3
+    base_lr: 3.e-4
     min_lr: 1.e-5
     mode: step
 
