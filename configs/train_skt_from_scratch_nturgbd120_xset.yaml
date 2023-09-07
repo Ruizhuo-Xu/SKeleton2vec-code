@@ -12,7 +12,7 @@ train_dataset:
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
       ]
-      split: xsub_train
+      split: xset_train
       # first_k: 100
   batch_size: 32
   num_workers: 8
@@ -30,7 +30,7 @@ val_dataset:
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
       ]
-      split: xsub_val
+      split: xset_val
   batch_size: 32
   num_workers: 8
 

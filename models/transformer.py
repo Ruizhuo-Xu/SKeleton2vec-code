@@ -216,6 +216,7 @@ class ClassificationHeadLight(nn.Sequential):
             nn.LayerNorm(emb_size), 
             Rearrange('(b m) n e -> b m n e', m=num_persons),
             Reduce('b m n e -> b e', reduction='mean'),
+            nn.BatchNorm1d(emb_size, affine=False),
             nn.Dropout(drop_p),
             nn.Linear(emb_size, n_classes))
 
@@ -299,7 +300,12 @@ class SkTForClassification(nn.Module):
 
         self.cls_head = models.make(cls_head_spec,
                                     args={'emb_size': self.emb_size})
-        self.apply(self._init_weights)
+        if encoder_pretrain_weight:
+            # if have pretrain weight, only init cls head
+            self.cls_head.apply(self._init_weights)
+        else:
+            self.apply(self._init_weights)
+
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
