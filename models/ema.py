@@ -33,6 +33,7 @@ class EMA(nn.Module):
                  **kwargs):
         super().__init__()
         self.model = self.deepcopy_model(model)
+        self.model.eval()
         self.model.requires_grad_(False)
         # self.cfg = cfg
         # self.device = device
@@ -54,7 +55,7 @@ class EMA(nn.Module):
             model = torch.load(tmp_path)
             os.remove(tmp_path)
             return model
-
+    
     def step(self, new_model: nn.Module):
         """
         One EMA step
@@ -71,7 +72,7 @@ class EMA(nn.Module):
                 ema_param = param.to(dtype=ema_param.dtype).clone()
             else:
                 ema_param.mul_(self.decay)
-                ema_param.add_(param.to(dtype=ema_param.dtype), alpha=1 - self.decay)
+                ema_param.add_(param.to(dtype=ema_param.dtype), alpha=1. - self.decay)
             ema_state_dict[key] = ema_param
         self.model.load_state_dict(ema_state_dict, strict=False)
         self.num_updates += 1

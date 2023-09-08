@@ -15,7 +15,7 @@ train_dataset:
       split: xsub_train
       # first_k: 100
   batch_size: 64
-  num_workers: 8
+  num_workers: 4
 
 val_dataset:
   dataset:
@@ -32,7 +32,7 @@ val_dataset:
       ]
       split: xsub_val
   batch_size: 64
-  num_workers: 8
+  num_workers: 4
 
 model:
   name: SkTForClassification
@@ -56,10 +56,10 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_test_bz64-lr3e-4-mask0.8-wd1e-2-L2/epoch-120.pth
+    encoder_pretrain_weight: save/nturgbd60_pretrain_v2_tmask20/epoch-last.pth
     encoder_freeze: true
   
-# resume: save/nturgbd60_wd1e-3/epoch-last.pth
+# resume: save/nturgbd60_pretrain_test_bz64-lr3e-4-mask0.8-wd1e-2-L2/epoch-last.pth
 
 optimizer:
   name: sgd

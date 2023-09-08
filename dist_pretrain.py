@@ -104,47 +104,59 @@ def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
     model.train()
     if config.get('smooth_l1_beta'):
         beta = config['smooth_l1_beta']
-        loss_fn = nn.SmoothL1Loss(reduction='none', beta=beta)
+        loss_fn = nn.SmoothL1Loss(beta=beta)
         if dist.get_rank() == 0 and epoch == 0:
             log(f'Using SmoothL1 Loss, beta:{beta}')
     else:
-        loss_fn = nn.MSELoss(reduction='none')
+        loss_fn = nn.MSELoss()
     train_loss = utils.Averager()
+    grad_norm_rec = []
 
-    with tqdm(train_loader,leave=False, desc='train') as t:
+    with tqdm(train_loader, leave=False, desc='train', ascii=True) as t:
         for iter_step, batch in enumerate(t):
             if lr_scheduler is not None and lr_scheduler.mode == 'step':
                 lr_scheduler.step(iter_step / len(train_loader) + epoch)
             for k, v in batch.items():
                 batch[k] = v.cuda()
 
-            src = batch['keypoint_mask']
-            trg = batch['keypoint']
+            # src = batch['keypoint_mask']
+            src = batch['keypoint']
             mask = batch['mask']
             # num_clips == 1
-            assert src.shape[1] == 1 and trg.shape[1] == 1 and mask.shape[1] == 1
+            assert src.shape[1] == 1 and mask.shape[1] == 1
             src = src[:, 0]
-            trg = trg[:, 0]
+            # trg = trg[:, 0]
             mask = mask[:, 0]
-            x, y = model(src, trg, mask)
+            x, y = model(src, mask)
             # pdb.set_trace()
             # loss = loss_fn(x.float(), y.float()).sum(dim=-1).sum().div(x.size(0))
-            loss = loss_fn(x.float(), y.float()).sum(dim=-1).mean()
+            loss = loss_fn(x.float(), y.float())
             train_loss.add(loss.item())
 
             optimizer.zero_grad()
             loss.backward()
+            grad_norm = utils.get_grad_norm_(model.parameters())
+            grad_norm_rec.append(grad_norm.item())
             optimizer.step()
             # EMA update
-            model.module.ema_step()
             ema_decay = model.module.ema.decay
+            if ema_decay != 1:
+                model.module.ema_step()
+            else:
+                raise
 
             current_lr = optimizer.param_groups[0]['lr']
             tqdm.set_postfix(t, {'loss': train_loss.item(),
                                  'lr': current_lr,
-                                 'ema_decay': ema_decay})
+                                 'ema_decay': ema_decay,
+                                 'grad_norm': grad_norm.item()})
 
             x = None; y = None; loss = None
+    if dist.get_rank() == 0:
+        grad_norm_avg = sum(grad_norm_rec) / len(grad_norm_rec)
+        # log(f'Epoch {epoch+1}, grad norm average: {grad_norm_avg:.4f}, min: {min(grad_norm_rec):.4f}, max: {max(grad_norm_rec):.4f}')
+        log(f'Epoch {epoch+1}, grad norm average: {grad_norm_avg:.4f}, '
+            f'min: {min(grad_norm_rec):.4f}, max: {max(grad_norm_rec):.4f}')
 
     return train_loss
 
@@ -153,27 +165,27 @@ def validate(val_loader, model):
     model.eval()
     if config.get('smooth_l1_beta'):
         beta = config['smooth_l1_beta']
-        loss_fn = nn.SmoothL1Loss(reduction='none', beta=beta)
+        loss_fn = nn.SmoothL1Loss(beta=beta)
     else:
-        loss_fn = nn.MSELoss(reduction='none')
+        loss_fn = nn.MSELoss()
     val_loss = utils.Averager()
 
-    with tqdm(val_loader, leave=False, desc='val') as t:
+    with tqdm(val_loader, leave=False, desc='val', ascii=True) as t:
         for batch in t:
             for k, v in batch.items():
                 batch[k] = v.cuda()
 
-            src = batch['keypoint_mask']
-            trg = batch['keypoint']
+            # src = batch['keypoint_mask']
+            src = batch['keypoint']
             mask = batch['mask']
             # num_clips == 1
-            assert src.shape[1] == 1 and trg.shape[1] == 1 and mask.shape[1] == 1
+            assert src.shape[1] == 1 and mask.shape[1] == 1
             src = src[:, 0]
-            trg = trg[:, 0]
+            # trg = trg[:, 0]
             mask = mask[:, 0]
-            x, y = model(src, trg, mask)
+            x, y = model(src, mask)
             # pdb.set_trace()
-            loss = loss_fn(x.float(), y.float()).sum(dim=-1).sum().div(x.size(0))
+            loss = loss_fn(x.float(), y.float())
             val_loss.add(loss.item())
 
             x = None; y = None; loss = None
@@ -181,7 +193,6 @@ def validate(val_loader, model):
                 'loss': val_loss.item()})
 
     return val_loss
-        
 
 
 def main(rank, world_size, config_, save_path, port='12355'):
@@ -216,6 +227,7 @@ def main(rank, world_size, config_, save_path, port='12355'):
         train_loss = train(train_loader, model, optimizer,
                                       epoch - 1, lr_scheduler)
         current_lr = optimizer.param_groups[0]['lr']
+        ema_decay = model.module.ema.decay
         if lr_scheduler is not None and lr_scheduler.mode == 'epoch':
             lr_scheduler.step()
         v = ddp_reduce(train_loss.v)
@@ -224,8 +236,11 @@ def main(rank, world_size, config_, save_path, port='12355'):
             # print(v, n, correct_num, total_num)
             train_loss = (v / n)
             log_info.append(f'train: loss={train_loss:.4f}')
+            log_info.append(f'train: lr={current_lr:.4f}')
+            log_info.append(f'train: ema_decay={ema_decay:.4f}')
             wandb.log({'train/loss': train_loss}, epoch)
             wandb.log({'train/lr': current_lr}, epoch)
+            wandb.log({'train/ema': ema_decay}, epoch)
 
         model_spec = config['model']
         model_spec['sd'] = model.module.state_dict()

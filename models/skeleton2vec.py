@@ -1,4 +1,5 @@
 import pdb
+import math
 
 import torch
 import torch.nn as nn
@@ -8,6 +9,7 @@ from einops import rearrange
 
 from .ema import EMA
 from . import models
+from .utils import trunc_normal_
 
 
 @models.register('Skeleton2Vec')
@@ -34,6 +36,10 @@ class Skeleton2Vec(nn.Module):
         self.__dict__.update(kwargs)
 
         self.regression_head = self._build_regression_head()
+        # param init
+        self.apply(self._init_weights)
+        self.fix_init_weight()
+
         self.ema = models.make(ema_spec, args={'model': self.encoder})  # EMA acts as the teacher
         self.ema_decay = self.ema.decay
         self.ema_end_decay = self.ema.ema_end_decay
@@ -58,6 +64,27 @@ class Skeleton2Vec(nn.Module):
         if self.modality in ['audio', 'vision']:
             return nn.Linear(self.embed_dim, self.embed_dim)
         """
+    
+    def fix_init_weight(self):
+        def rescale(param, layer_id):
+            param.div_(math.sqrt(2.0 * layer_id))
+
+        for layer_id, layer in enumerate(self.encoder.encoder.layers):
+            rescale(layer.attn.proj.weight.data, layer_id + 1)
+            rescale(layer.mlp.fc2.weight.data, layer_id + 1)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            trunc_normal_(m.weight, std=.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
 
     def ema_step(self):
         """
@@ -77,7 +104,7 @@ class Skeleton2Vec(nn.Module):
         if self.ema.decay < 1:
             self.ema(self.encoder)
 
-    def forward(self, src, trg=None, mask=None, **kwargs):
+    def forward(self, src, bool_masked_pos=None, **kwargs):
         """
         Data2Vec forward method.
 
@@ -91,18 +118,16 @@ class Skeleton2Vec(nn.Module):
             Either encoder outputs or a tuple of encoder + EMA outputs
 
         """
-        mask = mask[:, :, ::self.temporal_segment_size, :, :]
-        mask = rearrange(mask, 'B M T V 1 -> (B M) (T V)')
+        bool_masked_pos = bool_masked_pos[:, :, ::self.temporal_segment_size, :, :]
+        bool_masked_pos = rearrange(bool_masked_pos, 'B M T V 1 -> (B M) (T V) 1')
         # model forward in online mode (student)
         # x = self.encoder(src, mask, **kwargs)['encoder_out']  # fetch the last layer outputs
-        x = self.encoder(src, **kwargs)['last_hidden_state']  # fetch the last layer outputs
-        if trg is None:
-            return x
+        x = self.encoder(src, bool_masked_pos=bool_masked_pos, **kwargs)['last_hidden_state']  # fetch the last layer outputs
 
         # model forward in offline mode (teacher)
         with torch.no_grad():
             self.ema.model.eval()
-            y = self.ema.model(trg, **kwargs)['hidden_states']  # fetch the last transformer layers outputs
+            y = self.ema.model(src, bool_masked_pos=None, **kwargs)['hidden_states']  # fetch the last transformer layers outputs
             y = y[-self.average_top_k_layers:]  # take the last k transformer layers
 
             # Follow the same layer normalization procedure for text and vision
@@ -125,8 +150,9 @@ class Skeleton2Vec(nn.Module):
                     y = F.instance_norm(y.transpose(1, 2)).transpose(1, 2)
             """
 
-        x = x[mask]
-        y = y[mask]
+        mask = bool_masked_pos.flatten().bool()
+        x = rearrange(x, 'b n c -> (b n) c')[mask]
+        y = rearrange(y, 'b n c -> (b n) c')[mask]
 
         x = self.regression_head(x)
 

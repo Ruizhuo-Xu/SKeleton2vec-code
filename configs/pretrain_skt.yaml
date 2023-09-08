@@ -19,7 +19,7 @@ train_dataset:
     args:
       mask_ratio: 0.8
       mask_strategy: 'random'
-      temporal_mask_segment_size: 4
+      temporal_mask_segment_size: 20
   batch_size: 32
   num_workers: 8
 
@@ -42,7 +42,7 @@ val_dataset:
     args:
       mask_ratio: 0.8
       mask_strategy: 'random'
-      temporal_mask_segment_size: 4
+      temporal_mask_segment_size: 20
   batch_size: 32
   num_workers: 8
 
@@ -60,7 +60,8 @@ model:
         num_heads: 8
         att_drop_p: 0.
         forward_drop_p: 0.
-        drop_path_p: 0.
+        drop_path_p: 0.2
+        layer_scale_init_value: 1.e-4
     ema_spec:
       name: EMA
       args:
@@ -76,8 +77,8 @@ model:
 optimizer:
   name: adamw
   args:
-    lr: 1.e-3
-    weight_decay: 1.e-2
+    lr: 5.e-4
+    weight_decay: 5.e-2
 # smooth_l1_beta: 1.
 epoch_max: 200
 
@@ -86,7 +87,7 @@ lr_scheduler:
   args:
     warmup_epochs: 10
     max_epochs: 200
-    base_lr: 3.e-4
+    base_lr: 5.e-4
     min_lr: 1.e-5
     mode: step
 

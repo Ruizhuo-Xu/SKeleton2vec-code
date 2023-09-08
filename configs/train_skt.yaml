@@ -66,7 +66,7 @@ model:
     #     drop_p: 0.3
     
   
-# resume: save/nturgbd60_wd1e-3/epoch-last.pth
+resume: save/ntu120_xsub_init_smooth0.1/epoch-last.pth
 
 optimizer:
   name: adamw

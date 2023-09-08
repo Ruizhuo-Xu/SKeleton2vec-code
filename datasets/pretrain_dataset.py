@@ -49,9 +49,9 @@ class PretrainDataset(Dataset):
         data_mask  = copy.deepcopy(data)
         input_tensor = data_mask['keypoint']
         mask = self._get_mask(input_tensor, self.mask_ratio, self.mask_strategy)
-        input_tensor = input_tensor * (1 - mask)
-        data['keypoint_mask'] = input_tensor
-        data['mask'] = mask.bool()
+        # input_tensor = input_tensor * (1 - mask)
+        # data['keypoint_mask'] = input_tensor
+        data['mask'] = mask.bool() # N, M, T, V, 1
 
         return data
 
