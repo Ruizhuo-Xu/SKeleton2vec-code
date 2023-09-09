@@ -101,7 +101,14 @@ def prepare_training():
 
 
 def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
-    model.train()
+    train_mode = config.get('mode')
+    if train_mode == 'linear_probe':
+        model.eval()
+        model.module.cls_head.train()
+        if dist.get_rank() == 0 and epoch == 0:
+            log(f'Linear probe mode.')
+    else:
+        model.train()
     if config['label_smoothing'] > 0.:
         smoothing = config['label_smoothing']
         loss_fn = LabelSmoothingCrossEntropy(smoothing=smoothing)
@@ -114,7 +121,7 @@ def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
 
     with tqdm(train_loader,leave=False, desc='train') as t:
         for iter_step, batch in enumerate(t):
-            if lr_scheduler is not None and lr_scheduler.mode == 'step':
+            if isinstance(lr_scheduler, utils.CosineDecayWithWarmup) and lr_scheduler.mode == 'step':
                 lr_scheduler.step(iter_step / len(train_loader) + epoch)
             for k, v in batch.items():
                 batch[k] = v.cuda()
@@ -206,7 +213,9 @@ def main(rank, world_size, config_, save_path, port='12355'):
         train_loss, train_acc = train(train_loader, model, optimizer,
                                       epoch - 1, lr_scheduler)
         current_lr = optimizer.param_groups[0]['lr']
-        if lr_scheduler is not None and lr_scheduler.mode == 'epoch':
+        if isinstance(lr_scheduler, MultiStepLR):
+            lr_scheduler.step()
+        elif isinstance(lr_scheduler, utils.CosineDecayWithWarmup) and lr_scheduler.mode == 'epoch':
             lr_scheduler.step()
         v = ddp_reduce(train_loss.v)
         n = ddp_reduce(train_loss.n)

@@ -19,7 +19,7 @@ train_dataset:
     args:
       mask_ratio: 0.8
       mask_strategy: 'random'
-      temporal_mask_segment_size: 20
+      temporal_mask_segment_size: 40
   batch_size: 32
   num_workers: 8
 
@@ -42,7 +42,7 @@ val_dataset:
     args:
       mask_ratio: 0.8
       mask_strategy: 'random'
-      temporal_mask_segment_size: 20
+      temporal_mask_segment_size: 40
   batch_size: 32
   num_workers: 8
 

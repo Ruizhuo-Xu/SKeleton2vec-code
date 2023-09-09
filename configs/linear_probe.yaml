@@ -14,7 +14,7 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 64
+  batch_size: 128
   num_workers: 4
 
 val_dataset:
@@ -56,7 +56,7 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    encoder_pretrain_weight: save/nturgbd60_pretrain_v2_tmask20/epoch-last.pth
+    encoder_pretrain_weight: save/nturgbd60_pretrain_v2_tmask20/epoch-100.pth
     encoder_freeze: true
   
 # resume: save/nturgbd60_pretrain_test_bz64-lr3e-4-mask0.8-wd1e-2-L2/epoch-last.pth
@@ -69,15 +69,22 @@ optimizer:
     weight_decay: 0.
 epoch_max: 100
 
+# lr_scheduler:
+#   name: CosineDecayWithWarmup
+#   args:
+#     warmup_epochs: 0
+#     max_epochs: 100
+#     base_lr: 0.1
+#     min_lr: 0.
+#     mode: step
 lr_scheduler:
-  name: CosineDecayWithWarmup
+  name: MultiStepLr
   args:
-    warmup_epochs: 0
-    max_epochs: 100
-    base_lr: 0.1
-    min_lr: 0.
-    mode: step
+    milestones: [10, 30, 50]
+    gamma: 0.1
+    
 
 label_smoothing: 0.
 epoch_val: 1
 epoch_save: 200
+mode: linear_probe
