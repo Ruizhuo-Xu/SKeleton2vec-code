@@ -2,6 +2,7 @@ import argparse
 import os
 import math
 import pdb
+import sys
 
 import yaml
 import torch
@@ -83,6 +84,9 @@ def prepare_training():
             lr_scheduler = utils.make_lr_scheduler(optimizer, config['lr_scheduler'])
             for _ in range(epoch_start - 1):
                 lr_scheduler.step()
+        loss_scaler = utils.NativeScalerWithGradNormCount()
+        if sv_file.get('scaler'):
+            loss_scaler.load_state_dict(sv_file['scaler'])
     else:
         model = models.make(config['model']).cuda()
         optimizer = utils.make_optimizer(
@@ -92,15 +96,18 @@ def prepare_training():
             lr_scheduler = None
         else:
             lr_scheduler = utils.make_lr_scheduler(optimizer, config['lr_scheduler'])
+        loss_scaler = utils.NativeScalerWithGradNormCount()
 
     if dist.get_rank() == 0:
         log('model: #total params={}'.format(utils.compute_num_params(model, text=True)))
         log('model: #train params={}'.format(utils.compute_train_num_params(model, text=True)))
         log(model)
-    return model, optimizer, epoch_start, lr_scheduler
+    return model, optimizer, epoch_start, lr_scheduler, loss_scaler
 
 
-def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
+def train(train_loader, model, optimizer,
+          loss_scaler, enabble_amp=False,
+          epoch=None, lr_scheduler=None):
     train_mode = config.get('mode')
     if train_mode == 'linear_probe':
         model.eval()
@@ -118,6 +125,7 @@ def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
         loss_fn = nn.CrossEntropyLoss()
     train_loss = utils.Averager()
     train_acc = utils.Accuracy()
+    grad_norm_rec = []
 
     with tqdm(train_loader,leave=False, desc='train') as t:
         for iter_step, batch in enumerate(t):
@@ -131,28 +139,38 @@ def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
             assert inp.shape[1] == 1
             inp = inp[:, 0]
             labels = batch['label'].squeeze(-1)
-            logits = model(inp)
-            # pdb.set_trace()
-            loss = loss_fn(logits, labels)
+            with torch.cuda.amp.autocast(enabled=enabble_amp):
+                logits = model(inp)
+                loss = loss_fn(logits, labels)
+            if not math.isfinite(loss.item()):
+                print("Loss is {}, stopping training".format(loss.item()), force=True)
+                sys.exit(1)
             preds = logits.argmax(dim=1)
             train_loss.add(loss.item())
             train_acc.add(preds, labels)
 
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            grad_norm = loss_scaler(loss, optimizer, parameters=model.parameters())
+            grad_norm_rec.append(grad_norm.item())
+            # loss.backward()
+            # optimizer.step()
 
             current_lr = optimizer.param_groups[0]['lr']
             tqdm.set_postfix(t, {'loss': train_loss.item(),
                                  'lr': current_lr,
-                                 'train_acc': train_acc.item()})
+                                 'train_acc': train_acc.item(),
+                                 'grad norm': grad_norm.item()})
 
             preds = None; loss = None
+    if dist.get_rank() == 0:
+        grad_norm_avg = sum(grad_norm_rec) / len(grad_norm_rec)
+        log(f'Epoch {epoch+1}, grad norm average: {grad_norm_avg:.4f}, '
+            f'min: {min(grad_norm_rec):.4f}, max: {max(grad_norm_rec):.4f}')
 
     return train_loss, train_acc
 
 @torch.no_grad()
-def validate(val_loader, model):
+def validate(val_loader, model, enable_amp=False):
     model.eval()
     loss_fn = nn.CrossEntropyLoss()
     val_loss = utils.Averager()
@@ -167,8 +185,12 @@ def validate(val_loader, model):
             assert inp.shape[1] == 1
             inp = inp[:, 0]
             labels = batch['label'].squeeze(-1)
-            logits = model(inp)
-            loss = loss_fn(logits, labels)
+            with torch.cuda.amp.autocast(enabled=enable_amp):
+                logits = model(inp)
+                loss = loss_fn(logits, labels)
+            if not math.isfinite(loss.item()):
+                print("Loss is {}, stopping training".format(loss.item()), force=True)
+                sys.exit(1)
             preds = logits.argmax(dim=1)
             val_loss.add(loss.item())
             val_acc.add(preds, labels)
@@ -181,7 +203,7 @@ def validate(val_loader, model):
         
 
 
-def main(rank, world_size, config_, save_path, port='12355'):
+def main(rank, world_size, config_, save_path, port='12355', enable_amp=False):
     global config, log
     ddp_setup(rank, world_size, port)
     config = config_
@@ -195,7 +217,7 @@ def main(rank, world_size, config_, save_path, port='12355'):
 
     torch.cuda.set_device(rank)
     train_loader, val_loader = make_data_loaders()
-    model, optimizer, epoch_start, lr_scheduler = prepare_training()
+    model, optimizer, epoch_start, lr_scheduler, loss_scaler = prepare_training()
     model = model.cuda()
     model = DDP(model, device_ids=[rank], output_device=rank)
 
@@ -210,8 +232,10 @@ def main(rank, world_size, config_, save_path, port='12355'):
         t_epoch_start = timer.t()
         log_info = ['epoch {}/{}'.format(epoch, epoch_max)]
         train_loader.sampler.set_epoch(epoch)
-        train_loss, train_acc = train(train_loader, model, optimizer,
-                                      epoch - 1, lr_scheduler)
+        train_loss, train_acc = train(
+            train_loader, model, optimizer,
+            loss_scaler, enable_amp,
+            epoch - 1, lr_scheduler)
         current_lr = optimizer.param_groups[0]['lr']
         if isinstance(lr_scheduler, MultiStepLR):
             lr_scheduler.step()
@@ -234,10 +258,12 @@ def main(rank, world_size, config_, save_path, port='12355'):
         model_spec['sd'] = model.module.state_dict()
         optimizer_spec = config['optimizer']
         optimizer_spec['sd'] = optimizer.state_dict()
+        loss_scaler_sd = loss_scaler.state_dict()
         sv_file = {
             'model': model_spec,
             'optimizer': optimizer_spec,
-            'epoch': epoch
+            'epoch': epoch,
+            'scale': loss_scaler_sd
         }
 
         if rank == 0:
@@ -247,7 +273,7 @@ def main(rank, world_size, config_, save_path, port='12355'):
                     os.path.join(save_path, 'epoch-{}.pth'.format(epoch)))
 
         if (epoch_val is not None) and (epoch % epoch_val == 0):
-            val_loss, val_acc = validate(val_loader, model)
+            val_loss, val_acc = validate(val_loader, model, enable_amp)
             v = ddp_reduce(val_loss.v)
             n = ddp_reduce(val_loss.n)
             correct_num = ddp_reduce(val_acc.correct_num)
@@ -281,6 +307,8 @@ if __name__ == "__main__":
     parser.add_argument('--tag', default=None)
     parser.add_argument('--gpu', default='0')
     parser.add_argument('--port', default='12355')
+    parser.add_argument('--enable_amp', action='store_true', default=False,
+                        help='Enabling automatic mixed precision')
     args = parser.parse_args()
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -295,6 +323,9 @@ if __name__ == "__main__":
     if args.tag is not None:
         save_name += '_' + args.tag
     save_path = os.path.join('./save', save_name)
+
+    if args.enable_amp:
+        print('Enable amp')
 
     world_size = torch.cuda.device_count()
     mp.spawn(main, args=(world_size, config, save_path, args.port), nprocs=world_size)

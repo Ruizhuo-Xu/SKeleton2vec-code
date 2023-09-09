@@ -2,6 +2,7 @@ import argparse
 import os
 import math
 import pdb
+import sys
 
 import yaml
 import torch
@@ -84,6 +85,9 @@ def prepare_training():
             lr_scheduler = utils.make_lr_scheduler(optimizer, config['lr_scheduler'])
             for _ in range(epoch_start - 1):
                 lr_scheduler.step()
+        loss_scaler = utils.NativeScalerWithGradNormCount()
+        if sv_file.get('scaler'):
+            loss_scaler.load_state_dict(sv_file['scaler'])
     else:
         model = models.make(config['model']).cuda()
         optimizer = utils.make_optimizer(
@@ -93,14 +97,17 @@ def prepare_training():
             lr_scheduler = None
         else:
             lr_scheduler = utils.make_lr_scheduler(optimizer, config['lr_scheduler'])
+        loss_scaler = utils.NativeScalerWithGradNormCount()
 
     if dist.get_rank() == 0:
         log('model: #params={}'.format(utils.compute_num_params(model, text=True)))
         log(model)
-    return model, optimizer, epoch_start, lr_scheduler
+    return model, optimizer, epoch_start, lr_scheduler, loss_scaler
 
 
-def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
+def train(train_loader, model, optimizer,
+          loss_scaler, enable_amp=False,
+          epoch=None, lr_scheduler=None):
     model.train()
     if config.get('smooth_l1_beta'):
         beta = config['smooth_l1_beta']
@@ -114,7 +121,7 @@ def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
 
     with tqdm(train_loader, leave=False, desc='train', ascii=True) as t:
         for iter_step, batch in enumerate(t):
-            if lr_scheduler is not None and lr_scheduler.mode == 'step':
+            if isinstance(lr_scheduler, utils.CosineDecayWithWarmup) and lr_scheduler.mode == 'step':
                 lr_scheduler.step(iter_step / len(train_loader) + epoch)
             for k, v in batch.items():
                 batch[k] = v.cuda()
@@ -127,17 +134,22 @@ def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
             src = src[:, 0]
             # trg = trg[:, 0]
             mask = mask[:, 0]
-            x, y = model(src, mask)
-            # pdb.set_trace()
-            # loss = loss_fn(x.float(), y.float()).sum(dim=-1).sum().div(x.size(0))
-            loss = loss_fn(x.float(), y.float())
+            with torch.cuda.amp.autocast(enabled=enable_amp):
+                x, y = model(src, mask)
+                loss = loss_fn(x.float(), y.float())
+            if not math.isfinite(loss.item()):
+                print("Loss is {}, stopping training".format(loss.item()), force=True)
+                sys.exit(1)
             train_loss.add(loss.item())
 
             optimizer.zero_grad()
-            loss.backward()
-            grad_norm = utils.get_grad_norm_(model.parameters())
+            grad_norm = loss_scaler(loss, optimizer, parameters=model.parameters())
             grad_norm_rec.append(grad_norm.item())
-            optimizer.step()
+            # loss.backward()
+            # grad_norm = utils.get_grad_norm_(model.parameters())
+            # grad_norm_rec.append(grad_norm.item())
+            # optimizer.step()
+
             # EMA update
             ema_decay = model.module.ema.decay
             if ema_decay != 1:
@@ -154,14 +166,14 @@ def train(train_loader, model, optimizer, epoch=None, lr_scheduler=None):
             x = None; y = None; loss = None
     if dist.get_rank() == 0:
         grad_norm_avg = sum(grad_norm_rec) / len(grad_norm_rec)
-        # log(f'Epoch {epoch+1}, grad norm average: {grad_norm_avg:.4f}, min: {min(grad_norm_rec):.4f}, max: {max(grad_norm_rec):.4f}')
         log(f'Epoch {epoch+1}, grad norm average: {grad_norm_avg:.4f}, '
             f'min: {min(grad_norm_rec):.4f}, max: {max(grad_norm_rec):.4f}')
 
     return train_loss
 
+
 @torch.no_grad()
-def validate(val_loader, model):
+def validate(val_loader, model, enable_amp=False):
     model.eval()
     if config.get('smooth_l1_beta'):
         beta = config['smooth_l1_beta']
@@ -183,9 +195,12 @@ def validate(val_loader, model):
             src = src[:, 0]
             # trg = trg[:, 0]
             mask = mask[:, 0]
-            x, y = model(src, mask)
-            # pdb.set_trace()
-            loss = loss_fn(x.float(), y.float())
+            with torch.cuda.amp.autocast(enabled=enable_amp):
+                x, y = model(src, mask)
+                loss = loss_fn(x.float(), y.float())
+            if not math.isfinite(loss.item()):
+                print("Loss is {}, stopping training".format(loss.item()), force=True)
+                sys.exit(1)
             val_loss.add(loss.item())
 
             x = None; y = None; loss = None
@@ -195,7 +210,7 @@ def validate(val_loader, model):
     return val_loss
 
 
-def main(rank, world_size, config_, save_path, port='12355'):
+def main(rank, world_size, config_, save_path, port='12355', enable_amp=False):
     global config, log
     ddp_setup(rank, world_size, port)
     config = config_
@@ -209,9 +224,10 @@ def main(rank, world_size, config_, save_path, port='12355'):
 
     torch.cuda.set_device(rank)
     train_loader, val_loader = make_data_loaders()
-    model, optimizer, epoch_start, lr_scheduler = prepare_training()
+    model, optimizer, epoch_start, lr_scheduler, loss_scaler = prepare_training()
     model = model.cuda()
     model = DDP(model, device_ids=[rank], output_device=rank)
+    # model = torch.compile(model, mode='max-autotune')
 
     epoch_max = config['epoch_max']
     epoch_val = config.get('epoch_val')
@@ -219,16 +235,19 @@ def main(rank, world_size, config_, save_path, port='12355'):
     min_val_v = 1e8
 
     timer = utils.Timer()
-
     for epoch in range(epoch_start, epoch_max + 1):
         t_epoch_start = timer.t()
         log_info = ['epoch {}/{}'.format(epoch, epoch_max)]
         train_loader.sampler.set_epoch(epoch)
-        train_loss = train(train_loader, model, optimizer,
-                                      epoch - 1, lr_scheduler)
+        train_loss = train(
+            train_loader, model, optimizer,
+            loss_scaler, enable_amp,
+            epoch - 1, lr_scheduler)
         current_lr = optimizer.param_groups[0]['lr']
         ema_decay = model.module.ema.decay
-        if lr_scheduler is not None and lr_scheduler.mode == 'epoch':
+        if isinstance(lr_scheduler, MultiStepLR):
+            lr_scheduler.step()
+        elif isinstance(lr_scheduler, utils.CosineDecayWithWarmup) and lr_scheduler.mode == 'epoch':
             lr_scheduler.step()
         v = ddp_reduce(train_loss.v)
         n = ddp_reduce(train_loss.n)
@@ -246,10 +265,12 @@ def main(rank, world_size, config_, save_path, port='12355'):
         model_spec['sd'] = model.module.state_dict()
         optimizer_spec = config['optimizer']
         optimizer_spec['sd'] = optimizer.state_dict()
+        loss_scaler_sd = loss_scaler.state_dict()
         sv_file = {
             'model': model_spec,
             'optimizer': optimizer_spec,
-            'epoch': epoch
+            'epoch': epoch,
+            'scale': loss_scaler_sd
         }
 
         if rank == 0:
@@ -259,7 +280,7 @@ def main(rank, world_size, config_, save_path, port='12355'):
                     os.path.join(save_path, 'epoch-{}.pth'.format(epoch)))
 
         if (epoch_val is not None) and (epoch % epoch_val == 0):
-            val_loss = validate(val_loader, model)
+            val_loss = validate(val_loader, model, enable_amp)
             v = ddp_reduce(val_loss.v)
             n = ddp_reduce(val_loss.n)
             if rank == 0:
@@ -289,6 +310,8 @@ if __name__ == "__main__":
     parser.add_argument('--tag', default=None)
     parser.add_argument('--gpu', default='0')
     parser.add_argument('--port', default='12355')
+    parser.add_argument('--enable_amp', action='store_true', default=False,
+                        help='Enabling automatic mixed precision')
     args = parser.parse_args()
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -303,7 +326,10 @@ if __name__ == "__main__":
     if args.tag is not None:
         save_name += '_' + args.tag
     save_path = os.path.join('./save', save_name)
+    
+    if args.enable_amp:
+        print('Enable amp')
 
     world_size = torch.cuda.device_count()
-    mp.spawn(main, args=(world_size, config, save_path, args.port), nprocs=world_size)
+    mp.spawn(main, args=(world_size, config, save_path, args.port, args.enable_amp), nprocs=world_size)
 
