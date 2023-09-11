@@ -202,7 +202,6 @@ def validate(val_loader, model, enable_amp=False):
     return val_loss, val_acc
         
 
-
 def main(rank, world_size, config_, save_path, port='12355', enable_amp=False):
     global config, log
     ddp_setup(rank, world_size, port)
