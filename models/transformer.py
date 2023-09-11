@@ -309,6 +309,7 @@ class SkTForClassification(nn.Module):
             sv_file = torch.load(encoder_pretrain_weight)
             loaded_model = models.make(sv_file['model'], load_sd=True)
             self.encoder = loaded_model.encoder
+            # self.encoder = loaded_model.ema.model
         else:
             self.encoder = models.make(encoder_spec)
         if encoder_freeze:
@@ -324,16 +325,27 @@ class SkTForClassification(nn.Module):
         else:
             self.apply(self._init_weights)
 
-
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            # we use xavier_uniform following official JAX ViT:
-            torch.nn.init.xavier_uniform_(m.weight)
+            trunc_normal_(m.weight, std=.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            trunc_normal_(m.weight, std=.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         # we use xavier_uniform following official JAX ViT:
+    #         torch.nn.init.xavier_uniform_(m.weight)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
 
     def forward(self, x: torch.Tensor):
         out = self.encoder(x)

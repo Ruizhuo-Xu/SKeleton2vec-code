@@ -72,7 +72,7 @@ model:
     normalize_targets: true
     
   
-# resume: save/nturgbd60_pretrain_test_bz64/epoch-last.pth
+resume: save/nturgbd60_pretrain_v2_tmask40_ep400/epoch-last.pth
 
 optimizer:
   name: adamw
@@ -80,13 +80,14 @@ optimizer:
     lr: 5.e-4
     weight_decay: 5.e-2
 # smooth_l1_beta: 1.
-epoch_max: 200
+clip_grad: 3.0
+epoch_max: 400
 
 lr_scheduler:
   name: CosineDecayWithWarmup
   args:
-    warmup_epochs: 10
-    max_epochs: 200
+    warmup_epochs: 20
+    max_epochs: 400
     base_lr: 5.e-4
     min_lr: 1.e-5
     mode: step

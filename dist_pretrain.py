@@ -143,7 +143,9 @@ def train(train_loader, model, optimizer,
             train_loss.add(loss.item())
 
             optimizer.zero_grad()
-            grad_norm = loss_scaler(loss, optimizer, parameters=model.parameters())
+            grad_norm = loss_scaler(loss, optimizer,
+                                    parameters=model.parameters(),
+                                    clip_grad=config.get('clip_grad'))
             grad_norm_rec.append(grad_norm.item())
             # loss.backward()
             # grad_norm = utils.get_grad_norm_(model.parameters())
