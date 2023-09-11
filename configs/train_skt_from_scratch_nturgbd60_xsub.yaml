@@ -2,7 +2,7 @@ train_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu120_3danno.pkl
+      anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: RandomRot, args: {theta: 0.2}},
@@ -21,7 +21,7 @@ val_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu120_3danno.pkl
+      anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
@@ -53,20 +53,14 @@ model:
     cls_head_spec:
       name: ClassificationHeadLarge
       args:
-        n_classes: 120
+        n_classes: 60
         hidden_dim: 2048
         num_persons: 2
         num_joints: 25
         drop_p: 0.3
-    # cls_head_spec:
-    #   name: ClassificationHeadLight
-    #   args:
-    #     n_classes: 60
-    #     num_persons: 2
-    #     drop_p: 0.3
     
   
-resume: save/ntu120_xsub_init_smooth0.1/epoch-last.pth
+# resume: save/nturgbd60_wd1e-3/epoch-last.pth
 
 optimizer:
   name: adamw
@@ -85,6 +79,5 @@ lr_scheduler:
     mode: step
 
 label_smoothing: 0.1
-
 epoch_val: 1
 epoch_save: 200

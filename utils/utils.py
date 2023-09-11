@@ -3,10 +3,16 @@ import time
 import random
 import shutil
 import sys
+import math
 
 import torch
 from torch.optim import SGD, Adam, AdamW
 import numpy as np
+from torch.optim import lr_scheduler
+from torch.optim.lr_scheduler import MultiStepLR
+
+
+inf = math.inf
 
 
 class Averager():
@@ -21,7 +27,7 @@ class Averager():
         self.n += n
 
     def item(self):
-        return self.v / self.n
+        return self.v / (self.n + 1e-6)
 
 
 class Accuracy():
@@ -109,6 +115,17 @@ def compute_num_params(model, text=False):
         return tot
 
 
+def compute_train_num_params(model, text=False):
+    tot = int(sum([np.prod(p.shape) for p in model.parameters() if p.requires_grad]))
+    if text:
+        if tot >= 1e6:
+            return '{:.1f}M'.format(tot / 1e6)
+        else:
+            return '{:.1f}K'.format(tot / 1e3)
+    else:
+        return tot
+
+
 def make_optimizer(param_list, optimizer_spec, load_sd=False):
     Optimizer = {
         'sgd': SGD,
@@ -119,3 +136,82 @@ def make_optimizer(param_list, optimizer_spec, load_sd=False):
     if load_sd:
         optimizer.load_state_dict(optimizer_spec['sd'])
     return optimizer
+
+    
+class CosineDecayWithWarmup(lr_scheduler._LRScheduler):
+    def __init__(self,
+                 optimizer,
+                 warmup_epochs,
+                 max_epochs,
+                 base_lr,
+                 mode = 'epoch',
+                 min_lr=0):
+        assert mode in ['epoch', 'step']
+        self.warmup_epochs = warmup_epochs
+        self.max_epochs = max_epochs
+        self.base_lr = base_lr
+        self.mode = mode
+        self.epoch_offset = 1 if self.mode == 'epoch' else 0
+        self.min_lr = min_lr
+        super().__init__(optimizer)
+
+    def get_lr(self):
+        if self.last_epoch < self.warmup_epochs:
+            return [self.base_lr * (self.epoch_offset + self.last_epoch) / self.warmup_epochs]
+        else:
+            progress = ((self.epoch_offset + self.last_epoch - self.warmup_epochs)
+                        / (self.max_epochs - self.warmup_epochs))
+            return [self.min_lr + 0.5 * (self.base_lr - self.min_lr) * (1 + math.cos(math.pi * progress))]
+
+
+def make_lr_scheduler(optimizer, scheduler_spec):
+    Scheduler = {
+        'MultiStepLr': MultiStepLR,
+        'CosineDecayWithWarmup': CosineDecayWithWarmup,
+    }[scheduler_spec['name']]
+    scheduler = Scheduler(optimizer, **scheduler_spec['args'])
+    return scheduler
+
+
+def get_grad_norm_(parameters, norm_type: float = 2.0) -> torch.Tensor:
+    if isinstance(parameters, torch.Tensor):
+        parameters = [parameters]
+    parameters = [p for p in parameters if p.grad is not None]
+    norm_type = float(norm_type)
+    if len(parameters) == 0:
+        return torch.tensor(0.)
+    device = parameters[0].grad.device
+    if norm_type == inf:
+        total_norm = max(p.grad.detach().abs().max().to(device) for p in parameters)
+    else:
+        total_norm = torch.norm(torch.stack([torch.norm(p.grad.detach(), norm_type).to(device) for p in parameters]), norm_type)
+    return total_norm
+
+
+class NativeScalerWithGradNormCount:
+    state_dict_key = "amp_scaler"
+
+    def __init__(self):
+        self._scaler = torch.cuda.amp.GradScaler()
+
+    def __call__(self, loss, optimizer, clip_grad=None, parameters=None, create_graph=False, update_grad=True):
+        self._scaler.scale(loss).backward(create_graph=create_graph)
+        if update_grad:
+            if clip_grad is not None:
+                assert parameters is not None
+                self._scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
+                norm = torch.nn.utils.clip_grad_norm_(parameters, clip_grad)
+            else:
+                self._scaler.unscale_(optimizer)
+                norm = get_grad_norm_(parameters)
+            self._scaler.step(optimizer)
+            self._scaler.update()
+        else:
+            norm = None
+        return norm
+
+    def state_dict(self):
+        return self._scaler.state_dict()
+
+    def load_state_dict(self, state_dict):
+        self._scaler.load_state_dict(state_dict)

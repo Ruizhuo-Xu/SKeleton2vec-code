@@ -2,7 +2,7 @@ train_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu120_3danno.pkl
+      anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: RandomRot, args: {theta: 0.2}},
@@ -14,14 +14,14 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 32
-  num_workers: 8
+  batch_size: 128
+  num_workers: 4
 
 val_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu120_3danno.pkl
+      anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
@@ -31,8 +31,8 @@ val_dataset:
         {name: ToTensor, args: {keys: [keypoint, label]}},
       ]
       split: xsub_val
-  batch_size: 32
-  num_workers: 8
+  batch_size: 64
+  num_workers: 4
 
 model:
   name: SkTForClassification
@@ -51,40 +51,40 @@ model:
         forward_drop_p: 0.
         drop_path_p: 0.
     cls_head_spec:
-      name: ClassificationHeadLarge
+      name: ClassificationHeadLight
       args:
-        n_classes: 120
-        hidden_dim: 2048
+        n_classes: 60
         num_persons: 2
-        num_joints: 25
-        drop_p: 0.3
-    # cls_head_spec:
-    #   name: ClassificationHeadLight
-    #   args:
-    #     n_classes: 60
-    #     num_persons: 2
-    #     drop_p: 0.3
-    
+        drop_p: 0.
+    encoder_pretrain_weight: save/nturgbd60_pretrain_v2_tmask40_ep400/epoch-240.pth
+    encoder_freeze: true
   
-resume: save/ntu120_xsub_init_smooth0.1/epoch-last.pth
+# resume: save/nturgbd60_pretrain_test_bz64-lr3e-4-mask0.8-wd1e-2-L2/epoch-last.pth
 
 optimizer:
-  name: adamw
+  name: sgd
   args:
-    lr: 3.e-4
-    weight_decay: 5.e-2
+    lr: 0.1
+    momentum: 0.9
+    weight_decay: 0.
 epoch_max: 100
 
+# lr_scheduler:
+#   name: CosineDecayWithWarmup
+#   args:
+#     warmup_epochs: 0
+#     max_epochs: 100
+#     base_lr: 0.1
+#     min_lr: 0.
+#     mode: step
 lr_scheduler:
-  name: CosineDecayWithWarmup
+  name: MultiStepLr
   args:
-    warmup_epochs: 5
-    max_epochs: 100
-    base_lr: 3.e-4
-    min_lr: 1.e-5
-    mode: step
+    milestones: [10, 30, 50]
+    gamma: 0.1
+    
 
-label_smoothing: 0.1
-
+label_smoothing: 0.
 epoch_val: 1
 epoch_save: 200
+mode: linear_probe

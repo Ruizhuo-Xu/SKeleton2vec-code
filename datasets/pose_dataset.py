@@ -3,11 +3,11 @@ import copy
 
 import torch
 from torch.utils.data import Dataset
-from .datasets import register
+from . import datasets
 from . import pipelines as pipes
 
 
-@register('PoseDataset')
+@datasets.register('PoseDataset')
 class PoseDataset(Dataset):
     """
     Dataset for loading pose data.

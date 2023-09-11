@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from collections.abc import Sequence
-from .pipelines import register
+from . import pipelines
 
 
 class Rename:
@@ -28,7 +28,7 @@ class Rename:
         return results
 
 
-@register('Collect')
+@pipelines.register('Collect')
 class Collect:
     """Collect data from the loader relevant to the specific task.
 
@@ -126,7 +126,7 @@ def to_tensor(data):
     raise TypeError(f'type {type(data)} cannot be converted to tensor.')
 
 
-@register('ToTensor')
+@pipelines.register('ToTensor')
 class ToTensor:
     """Convert some values in results dict to `torch.Tensor` type in data
     loader pipeline.
