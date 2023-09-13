@@ -14,8 +14,8 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 64
-  num_workers: 4
+  batch_size: 48
+  num_workers: 8
 
 val_dataset:
   dataset:
@@ -31,60 +31,61 @@ val_dataset:
         {name: ToTensor, args: {keys: [keypoint, label]}},
       ]
       split: xsub_val
-  batch_size: 64
-  num_workers: 4
+  batch_size: 8
+  num_workers: 8
 
 model:
-  name: SkTForClassification
+  name: Skeleton2Vec2
   args:
-    encoder_spec:
-      name: SkT
-      args:
+    model_spec:
+      name: SkTWithDecoder
+      args: 
         in_channels: 3
         temporal_segment_size: 4
         spatio_size: 25
         temporal_size: 120
-        emb_size: 256
-        depth: 8
+        encoder_emb_size: 256
+        decoder_emb_size: 256
+        encoder_depth: 8
+        decoder_depth: 4
         num_heads: 8
         att_drop_p: 0.
         forward_drop_p: 0.
-        drop_path_p: 0.
-    cls_head_spec:
-      name: ClassificationHeadLight
+        drop_path_p: 0.2
+        layer_scale_init_value: 1.e-4
+    ema_spec:
+      name: EMA
       args:
-        n_classes: 60
-        num_persons: 2
-        drop_p: 0.
-    encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_2mask/epoch-60.pth
-    encoder_freeze: true
+        ema_decay: 0.999
+        ema_end_decay: 0.9999
+        ema_anneal_end_step: 36000
+    average_top_k_layers: 8
+    norm_target_per_layer: instance_norm
+    normalize_targets: true
+
+mask_ratio: 0.8
+num_masked_views: 1
+    
   
-# resume: save/nturgbd60_pretrain_test_bz64-lr3e-4-mask0.8-wd1e-2-L2/epoch-last.pth
+# resume: save/nturgbd60_pretrain_v2_tmask40_ep400/epoch-last.pth
 
 optimizer:
-  name: sgd
+  name: adamw
   args:
-    lr: 0.1
-    momentum: 0.9
-    weight_decay: 0.
-epoch_max: 100
+    lr: 5.e-4
+    weight_decay: 5.e-2
+# smooth_l1_beta: 1.
+# clip_grad: 3.0
+epoch_max: 200
 
-# lr_scheduler:
-#   name: CosineDecayWithWarmup
-#   args:
-#     warmup_epochs: 0
-#     max_epochs: 100
-#     base_lr: 0.1
-#     min_lr: 0.
-#     mode: step
 lr_scheduler:
-  name: MultiStepLr
+  name: CosineDecayWithWarmup
   args:
-    milestones: [10, 30, 50]
-    gamma: 0.1
-    
+    warmup_epochs: 20
+    max_epochs: 200
+    base_lr: 5.e-4
+    min_lr: 1.e-5
+    mode: step
 
-label_smoothing: 0.
-epoch_val: 1
-epoch_save: 200
-mode: linear_probe
+epoch_val: 1000
+epoch_save: 20
