@@ -117,12 +117,23 @@ def train(train_loader, model, optimizer,
     else:
         loss_fn = nn.MSELoss()
     train_loss = utils.Averager()
+
+    grad_accum_steps = config.get('grad_accum_steps', 1)
+    mask_ratio = config.get('mask_ratio', 0.8)
+    num_masked_views = config.get('num_masked_views', 1)
+    clip_grad = config.get('clip_grad')
+    if dist.get_rank() == 0 and epoch == 0:
+        log(f'grad_accum_steps={grad_accum_steps}, '
+            f'mask_ratio={mask_ratio}, '
+            f'num_masked_views={num_masked_views}, '
+            f'clip_grad={clip_grad}')
     grad_norm_rec = []
 
     with tqdm(train_loader, leave=False, desc='train', ascii=True) as t:
         for iter_step, batch in enumerate(t):
             if isinstance(lr_scheduler, utils.CosineDecayWithWarmup) and lr_scheduler.mode == 'step':
-                lr_scheduler.step(iter_step / len(train_loader) + epoch)
+                if iter_step % grad_accum_steps == 0:
+                    lr_scheduler.step((iter_step + 1) / len(train_loader) + epoch)
             for k, v in batch.items():
                 batch[k] = v.cuda()
 
@@ -135,37 +146,36 @@ def train(train_loader, model, optimizer,
             # trg = trg[:, 0]
             # mask = mask[:, 0]
             with torch.cuda.amp.autocast(enabled=enable_amp):
-                x, y = model(src, mask_ratio=config.get('mask_ratio', 0.8),
-                             num_masked_views=config.get('num_masked_views', 1))
+                x, y = model(src, mask_ratio=mask_ratio,
+                             num_masked_views=num_masked_views)
                 loss = loss_fn(x.float(), y.float())
+            loss = loss / grad_accum_steps
             if not math.isfinite(loss.item()):
                 print("Loss is {}, stopping training".format(loss.item()), force=True)
                 sys.exit(1)
             train_loss.add(loss.item())
 
-            optimizer.zero_grad()
+            update_grad = (iter_step + 1) % grad_accum_steps == 0
             grad_norm = loss_scaler(loss, optimizer,
                                     parameters=model.parameters(),
-                                    clip_grad=config.get('clip_grad'))
-            grad_norm_rec.append(grad_norm.item())
-            # loss.backward()
-            # grad_norm = utils.get_grad_norm_(model.parameters())
-            # grad_norm_rec.append(grad_norm.item())
-            # optimizer.step()
+                                    clip_grad=clip_grad,
+                                    update_grad=update_grad)
 
-            # EMA update
-            ema_decay = model.module.ema.decay
-            if ema_decay != 1:
-                model.module.ema_step()
-            else:
-                raise
-
-            current_lr = optimizer.param_groups[0]['lr']
-            tqdm.set_postfix(t, {'loss': train_loss.item(),
-                                 'lr': current_lr,
-                                 'ema_decay': ema_decay,
-                                 'grad_norm': grad_norm.item()})
-
+            if update_grad:
+                optimizer.zero_grad()
+                grad_norm_rec.append(grad_norm.item())
+                # EMA update
+                ema_decay = model.module.ema.decay
+                if ema_decay != 1:
+                    model.module.ema_step()
+                else:
+                    raise
+                # torch.cuda.synchronize()
+                current_lr = optimizer.param_groups[0]['lr']
+                tqdm.set_postfix(t, {'loss': train_loss.item(),
+                                    'lr': current_lr,
+                                    'ema_decay': ema_decay,
+                                    'grad_norm': grad_norm.item()})
             x = None; y = None; loss = None
     if dist.get_rank() == 0:
         grad_norm_avg = sum(grad_norm_rec) / len(grad_norm_rec)
@@ -249,6 +259,7 @@ def main(rank, world_size, config_, save_path, args):
             train_loader, model, optimizer,
             loss_scaler, args.enable_amp,
             epoch - 1, lr_scheduler)
+        torch.cuda.synchronize()
         current_lr = optimizer.param_groups[0]['lr']
         ema_decay = model.module.ema.decay
         if isinstance(lr_scheduler, MultiStepLR):
@@ -261,8 +272,8 @@ def main(rank, world_size, config_, save_path, args):
             # print(v, n, correct_num, total_num)
             train_loss = (v / n)
             log_info.append(f'train: loss={train_loss:.4f}')
-            log_info.append(f'train: lr={current_lr:.4f}')
-            log_info.append(f'train: ema_decay={ema_decay:.4f}')
+            log_info.append(f'train: lr={current_lr:.6f}')
+            log_info.append(f'train: ema_decay={ema_decay:.6f}')
             wandb.log({'train/loss': train_loss}, epoch)
             wandb.log({'train/lr': current_lr}, epoch)
             wandb.log({'train/ema': ema_decay}, epoch)
