@@ -53,39 +53,42 @@ model:
         forward_drop_p: 0.
         drop_path_p: 0.2
         layer_scale_init_value: 1.e-4
+        mask_strategy: 'tube'
     ema_spec:
       name: EMA
       args:
-        ema_decay: 0.999
-        ema_end_decay: 0.9999
-        ema_anneal_end_step: 36000
+        ema_decay: 0.9998
+        ema_end_decay: 0.99999
+        ema_anneal_end_step: 20000
     average_top_k_layers: 8
-    norm_target_per_layer: instance_norm
+    norm_target_per_layer: layer_norm
     normalize_targets: true
-
-mask_ratio: 0.8
-num_masked_views: 1
-    
   
 # resume: save/nturgbd60_pretrain_v2_tmask40_ep400/epoch-last.pth
+# resume: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube_resume/epoch-last.pth
 
 optimizer:
   name: adamw
   args:
     lr: 5.e-4
+    betas: [0.9, 0.95]
     weight_decay: 5.e-2
-# smooth_l1_beta: 1.
-# clip_grad: 3.0
-epoch_max: 200
 
 lr_scheduler:
   name: CosineDecayWithWarmup
   args:
     warmup_epochs: 20
-    max_epochs: 200
+    max_epochs: 400
     base_lr: 5.e-4
     min_lr: 1.e-5
     mode: step
 
+mask_ratio: 0.85
+tube_len: 10
+num_masked_views: 1
+grad_accum_steps: 1
+# smooth_l1_beta: 1.
+clip_grad: 3.0
+epoch_max: 400
 epoch_val: 1000
 epoch_save: 20
