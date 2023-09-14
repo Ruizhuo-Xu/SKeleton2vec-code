@@ -52,7 +52,7 @@ def make_data_loader(spec, tag=''):
         for k, v in dataset[0].items():
             log('  {}: shape={}'.format(k, tuple(v.shape)))
 
-    loader = DataLoader(
+    loader = utils.MultiEpochsDataLoader(
         dataset,
         batch_size=spec['batch_size'],
         shuffle=False,
@@ -60,6 +60,14 @@ def make_data_loader(spec, tag=''):
         pin_memory=True,
         sampler=DistributedSampler(dataset)
     )
+    # loader = DataLoader(
+    #     dataset,
+    #     batch_size=spec['batch_size'],
+    #     shuffle=False,
+    #     num_workers=spec.get('num_workers', 0),
+    #     pin_memory=True,
+    #     sampler=DistributedSampler(dataset)
+    # )
     return loader
 
 
@@ -202,9 +210,9 @@ def validate(val_loader, model, enable_amp=False):
     return val_loss, val_acc
         
 
-def main(rank, world_size, config_, save_path, port='12355', enable_amp=False):
+def main(rank, world_size, config_, save_path, args):
     global config, log
-    ddp_setup(rank, world_size, port)
+    ddp_setup(rank, world_size, args.port)
     config = config_
     if rank == 0:
         save_name = save_path.split('/')[-1]
@@ -219,6 +227,10 @@ def main(rank, world_size, config_, save_path, port='12355', enable_amp=False):
     model, optimizer, epoch_start, lr_scheduler, loss_scaler = prepare_training()
     model = model.cuda()
     model = DDP(model, device_ids=[rank], output_device=rank)
+    if args.compile:
+        if rank == 0:
+            log('Compiling model...')
+        model = torch.compile(model)
 
     epoch_max = config['epoch_max']
     epoch_val = config.get('epoch_val')
@@ -233,7 +245,7 @@ def main(rank, world_size, config_, save_path, port='12355', enable_amp=False):
         train_loader.sampler.set_epoch(epoch)
         train_loss, train_acc = train(
             train_loader, model, optimizer,
-            loss_scaler, enable_amp,
+            loss_scaler, args.enable_amp,
             epoch - 1, lr_scheduler)
         current_lr = optimizer.param_groups[0]['lr']
         if isinstance(lr_scheduler, MultiStepLR):
@@ -272,7 +284,7 @@ def main(rank, world_size, config_, save_path, port='12355', enable_amp=False):
                     os.path.join(save_path, 'epoch-{}.pth'.format(epoch)))
 
         if (epoch_val is not None) and (epoch % epoch_val == 0):
-            val_loss, val_acc = validate(val_loader, model, enable_amp)
+            val_loss, val_acc = validate(val_loader, model, args.enable_amp)
             v = ddp_reduce(val_loss.v)
             n = ddp_reduce(val_loss.n)
             correct_num = ddp_reduce(val_acc.correct_num)
@@ -308,6 +320,8 @@ if __name__ == "__main__":
     parser.add_argument('--port', default='12355')
     parser.add_argument('--enable_amp', action='store_true', default=False,
                         help='Enabling automatic mixed precision')
+    parser.add_argument('--compile', action='store_true', default=False,
+                        help='Enabling torch.Compile')
     args = parser.parse_args()
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -327,5 +341,5 @@ if __name__ == "__main__":
         print('Enable amp')
 
     world_size = torch.cuda.device_count()
-    mp.spawn(main, args=(world_size, config, save_path, args.port), nprocs=world_size)
+    mp.spawn(main, args=(world_size, config, save_path, args), nprocs=world_size)
 

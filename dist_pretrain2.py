@@ -53,7 +53,7 @@ def make_data_loader(spec, tag=''):
         for k, v in dataset[0].items():
             log('  {}: shape={}'.format(k, tuple(v.shape)))
 
-    loader = DataLoader(
+    loader = utils.MultiEpochsDataLoader(
         dataset,
         batch_size=spec['batch_size'],
         shuffle=False,
@@ -61,6 +61,14 @@ def make_data_loader(spec, tag=''):
         pin_memory=True,
         sampler=DistributedSampler(dataset)
     )
+    # loader = DataLoader(
+    #     dataset,
+    #     batch_size=spec['batch_size'],
+    #     shuffle=False,
+    #     num_workers=spec.get('num_workers', 0),
+    #     pin_memory=True,
+    #     sampler=DistributedSampler(dataset)
+    # )
     return loader
 
 
@@ -120,13 +128,15 @@ def train(train_loader, model, optimizer,
 
     grad_accum_steps = config.get('grad_accum_steps', 1)
     mask_ratio = config.get('mask_ratio', 0.8)
+    tube_len = config.get('tube_len', 6)
     num_masked_views = config.get('num_masked_views', 1)
     clip_grad = config.get('clip_grad')
     if dist.get_rank() == 0 and epoch == 0:
         log(f'grad_accum_steps={grad_accum_steps}, '
             f'mask_ratio={mask_ratio}, '
             f'num_masked_views={num_masked_views}, '
-            f'clip_grad={clip_grad}')
+            f'clip_grad={clip_grad}, '
+            f'tube_len={tube_len}')
     grad_norm_rec = []
 
     with tqdm(train_loader, leave=False, desc='train', ascii=True) as t:
@@ -147,6 +157,7 @@ def train(train_loader, model, optimizer,
             # mask = mask[:, 0]
             with torch.cuda.amp.autocast(enabled=enable_amp):
                 x, y = model(src, mask_ratio=mask_ratio,
+                             tube_len=tube_len,
                              num_masked_views=num_masked_views)
                 loss = loss_fn(x.float(), y.float())
             loss = loss / grad_accum_steps

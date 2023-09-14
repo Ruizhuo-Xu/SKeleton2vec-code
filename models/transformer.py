@@ -313,12 +313,17 @@ class SkTWithDecoder(nn.Module):
                  drop_path_p: float = 0.,
                  norm_layer = partial(nn.LayerNorm, eps=1e-6),
                  layer_scale_init_value: float = None,
+                 mask_strategy: str = 'random',
                  **kwargs):
         super().__init__()
         self.spatio_size = spatio_size
         self.temporal_size = temporal_size
         self.temporal_segment_size = temporal_segment_size
+        self.temporal_segments = temporal_size // temporal_segment_size
         self.encoder_emb_size = encoder_emb_size
+        assert mask_strategy in ['random', 'tube'],\
+            f'Unknown mask strategy: {mask_strategy}'
+        self.mask_strategy = mask_strategy
         self.encoder_embedding = JointEmbedding(in_channels, temporal_segment_size,
                         spatio_size, temporal_size, encoder_emb_size)
         self.encoder = TransformerEncoder(encoder_depth,
@@ -347,7 +352,7 @@ class SkTWithDecoder(nn.Module):
 
         self.decoder_spatio_pos_emb = nn.Parameter(torch.zeros(1, decoder_emb_size, 1, spatio_size))
         self.decoder_temporal_pos_emb = nn.Parameter(torch.zeros(1, decoder_emb_size,
-                                                         temporal_size // temporal_segment_size, 1))
+                                                                 self.temporal_segments, 1))
         self.mask_token_emb = nn.Parameter(torch.zeros(1, 1, decoder_emb_size))
         trunc_normal_(self.decoder_spatio_pos_emb, std=.02)
         trunc_normal_(self.decoder_temporal_pos_emb, std=.02)
@@ -381,11 +386,51 @@ class SkTWithDecoder(nn.Module):
         mask = torch.gather(mask, dim=1, index=ids_restore)
 
         return x_masked, mask, ids_restore, ids_keep
+
+    def tube_masking(self, x, mask_ratio, tube_len):
+        N, L, D = x.shape  # batch, length, dim
+        VP, TP = self.spatio_size, self.temporal_segments
+        len_VP_keep = int(VP * (1 - mask_ratio))
+
+        # Divide the dimension of time into several tubes
+        TP_ = TP // tube_len
+        noise = torch.rand(N, TP_, VP, device=x.device)  # noise in [0, 1]
+
+        # sort noise for each sample
+        ids_shuffle = torch.argsort(
+            noise, dim=-1
+        )  # ascend: small is keep, large is remove
+        ids_restore = torch.argsort(ids_shuffle, dim=-1)
+
+        # Fill the tubes to restore the original dimension of time
+        ids_shuffle = ids_shuffle.repeat_interleave(tube_len, dim=1)
+        ids_restore = ids_restore.repeat_interleave(tube_len, dim=1)
+
+        # keep the first subset
+        ids_keep = ids_shuffle[:, :, :len_VP_keep]
+        x_masked = torch.gather(x.view(N, TP, VP, D), dim=2,
+                                index=ids_keep.unsqueeze(-1).repeat(1, 1, 1, D))
+        x_masked = rearrange(x_masked, 'n t v d -> n (t v) d')
+
+        # generate the binary mask: 0 is keep, 1 is remove
+        mask = torch.ones([N, TP, VP], device=x.device)
+        mask[:, :, :len_VP_keep] = 0
+        # unshuffle to get the binary mask
+        mask = torch.gather(mask, dim=2, index=ids_restore)
+        mask = rearrange(mask, 'n t v -> n (t v)')
+
+        return x_masked, mask, ids_restore, ids_keep
     
-    def forward_encoder(self, x, mask_ratio=0., output_hidden_states=True):
+    def forward_encoder(self, x, mask_ratio: float = 0.,
+                        tube_len: int = 6, output_hidden_states=True):
         x = self.encoder_embedding(x, bool_masked_pos=None)
         if mask_ratio > 0.:
-            x, mask, id_restore, _ = self.random_masking(x, mask_ratio)
+            if self.mask_strategy == 'random':
+                x, mask, id_restore, _ = self.random_masking(x, mask_ratio)
+            elif self.mask_strategy == 'tube':
+                x, mask, id_restore, _ = self.tube_masking(x, mask_ratio, tube_len)
+            else:
+                raise NotImplementedError
         else:
             mask = None
             id_restore = None
@@ -399,7 +444,7 @@ class SkTWithDecoder(nn.Module):
 
     def forward_decoder(self, x, id_restore):
         NM = x.shape[0]
-        TP = self.temporal_size // self.temporal_segment_size
+        TP = self.temporal_segments
         VP = self.spatio_size
 
         x = self.decoder_embedding(x)
@@ -407,10 +452,17 @@ class SkTWithDecoder(nn.Module):
 
         mask_tokens = self.mask_token_emb.repeat(NM, TP * VP - x.shape[1], 1)
         x_ = torch.cat([x[:, :, :], mask_tokens], dim=1)
-        x_ = torch.gather(
-            x_, dim=1, index=id_restore[:, :, None].repeat(1, 1, C)
-        )  # unshuffle
-        x = rearrange(x_, 'b (t v) c -> b c t v', t=TP, v=VP)
+        if self.mask_strategy == 'random':
+            x_ = torch.gather(
+                x_, dim=1, index=id_restore[:, :, None].repeat(1, 1, C)
+            )  # unshuffle
+            x = rearrange(x_, 'b (t v) c -> b c t v', t=TP, v=VP)
+        elif self.mask_strategy == 'tube':
+            x_ = rearrange(x_, 'b (t v) c -> b t v c', t=TP, v=VP)
+            x_ = torch.gather(
+                x_, dim=2, index=id_restore[:, :, :, None].repeat(1, 1, 1, C)
+            )
+            x = rearrange(x_, 'b t v c -> b c t v')
 
         # add pos & temp embed
         x = x + self.decoder_spatio_pos_emb + self.decoder_temporal_pos_emb
@@ -425,8 +477,8 @@ class SkTWithDecoder(nn.Module):
 
         return x
 
-    def forward(self, x, mask_ratio=0.8):
-        encoder_outputs = self.forward_encoder(x, mask_ratio)
+    def forward(self, x, mask_ratio: float = 0.8, tube_len: int = 6):
+        encoder_outputs = self.forward_encoder(x, mask_ratio, tube_len)
         id_restore = encoder_outputs['id_restore']
         mask = encoder_outputs['mask']
         latent = encoder_outputs['last_hidden_state']
