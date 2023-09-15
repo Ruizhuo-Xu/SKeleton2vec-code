@@ -83,7 +83,7 @@ lr_scheduler:
     min_lr: 1.e-5
     mode: step
 
-mask_ratio: 0.85
+mask_ratio: 0.90
 tube_len: 10
 num_masked_views: 1
 grad_accum_steps: 1

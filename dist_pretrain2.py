@@ -53,15 +53,7 @@ def make_data_loader(spec, tag=''):
         for k, v in dataset[0].items():
             log('  {}: shape={}'.format(k, tuple(v.shape)))
 
-    loader = utils.MultiEpochsDataLoader(
-        dataset,
-        batch_size=spec['batch_size'],
-        shuffle=False,
-        num_workers=spec.get('num_workers', 0),
-        pin_memory=True,
-        sampler=DistributedSampler(dataset)
-    )
-    # loader = DataLoader(
+    # loader = utils.MultiEpochsDataLoader(
     #     dataset,
     #     batch_size=spec['batch_size'],
     #     shuffle=False,
@@ -69,6 +61,13 @@ def make_data_loader(spec, tag=''):
     #     pin_memory=True,
     #     sampler=DistributedSampler(dataset)
     # )
+    loader = DataLoader( dataset,
+        batch_size=spec['batch_size'],
+        shuffle=False,
+        num_workers=spec.get('num_workers', 0),
+        pin_memory=True,
+        sampler=DistributedSampler(dataset)
+    )
     return loader
 
 

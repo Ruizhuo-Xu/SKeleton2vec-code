@@ -393,6 +393,7 @@ class SkTWithDecoder(nn.Module):
         len_VP_keep = int(VP * (1 - mask_ratio))
 
         # Divide the dimension of time into several tubes
+        assert TP % tube_len == 0
         TP_ = TP // tube_len
         noise = torch.rand(N, TP_, VP, device=x.device)  # noise in [0, 1]
 
