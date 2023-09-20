@@ -5,9 +5,10 @@ train_dataset:
       anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {}},
-        {name: RandomRot, args: {theta: 0.2}},
+        {name: RandomRot, args: {theta: 0.3}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        {name: UniformSampleDecode, args: {clip_len: 120}},
+        {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
+        # {name: UniformSampleDecode, args: {clip_len: 90}},
         {name: FormatGCNInput, args: {}},
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
@@ -25,7 +26,8 @@ val_dataset:
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        {name: UniformSampleDecode, args: {clip_len: 120}},
+        {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
+        # {name: UniformSampleDecode, args: {clip_len: 90}},
         {name: FormatGCNInput, args: {}},
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
@@ -64,7 +66,6 @@ model:
     norm_target_per_layer: layer_norm
     normalize_targets: true
   
-# resume: save/nturgbd60_pretrain_v2_tmask40_ep400/epoch-last.pth
 # resume: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube_resume/epoch-last.pth
 
 optimizer:
@@ -84,7 +85,8 @@ lr_scheduler:
     mode: step
 
 mask_ratio: 0.90
-tube_len: 10
+tube_len: 5
+random_tube: false
 num_masked_views: 1
 grad_accum_steps: 1
 # smooth_l1_beta: 1.
