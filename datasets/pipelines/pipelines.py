@@ -1,12 +1,12 @@
 import copy
 
 
-pipelines = {}
+_pipelines = {}
 
 
 def register(name):
     def decorator(cls):
-        pipelines[name] = cls
+        _pipelines[name] = cls
         return cls
     return decorator
 
@@ -17,5 +17,5 @@ def make(pipe_spec, args=None):
         pipeline_args.update(args)
     else:
         pipeline_args = pipe_spec['args']
-    pipeline = pipelines[pipe_spec['name']](**pipeline_args)
+    pipeline = _pipelines[pipe_spec['name']](**pipeline_args)
     return pipeline

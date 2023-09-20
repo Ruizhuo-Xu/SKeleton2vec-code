@@ -3,6 +3,7 @@ import os
 import math
 import pdb
 import sys
+import random
 
 import yaml
 import torch
@@ -53,15 +54,7 @@ def make_data_loader(spec, tag=''):
         for k, v in dataset[0].items():
             log('  {}: shape={}'.format(k, tuple(v.shape)))
 
-    loader = utils.MultiEpochsDataLoader(
-        dataset,
-        batch_size=spec['batch_size'],
-        shuffle=False,
-        num_workers=spec.get('num_workers', 0),
-        pin_memory=True,
-        sampler=DistributedSampler(dataset)
-    )
-    # loader = DataLoader(
+    # loader = utils.MultiEpochsDataLoader(
     #     dataset,
     #     batch_size=spec['batch_size'],
     #     shuffle=False,
@@ -69,6 +62,13 @@ def make_data_loader(spec, tag=''):
     #     pin_memory=True,
     #     sampler=DistributedSampler(dataset)
     # )
+    loader = DataLoader( dataset,
+        batch_size=spec['batch_size'],
+        shuffle=False,
+        num_workers=spec.get('num_workers', 0),
+        pin_memory=True,
+        sampler=DistributedSampler(dataset)
+    )
     return loader
 
 
@@ -156,6 +156,9 @@ def train(train_loader, model, optimizer,
             # trg = trg[:, 0]
             # mask = mask[:, 0]
             with torch.cuda.amp.autocast(enabled=enable_amp):
+                if config.get('random_tube'):
+                    tube_list = [1, 2, 3, 5, 6]
+                    tube_len = random.sample(tube_list, k=1)[0]
                 x, y = model(src, mask_ratio=mask_ratio,
                              tube_len=tube_len,
                              num_masked_views=num_masked_views)
@@ -186,7 +189,8 @@ def train(train_loader, model, optimizer,
                 tqdm.set_postfix(t, {'loss': train_loss.item(),
                                     'lr': current_lr,
                                     'ema_decay': ema_decay,
-                                    'grad_norm': grad_norm.item()})
+                                    'grad_norm': grad_norm.item(),
+                                    'tube_len': tube_len})
             x = None; y = None; loss = None
     if dist.get_rank() == 0:
         grad_norm_avg = sum(grad_norm_rec) / len(grad_norm_rec)

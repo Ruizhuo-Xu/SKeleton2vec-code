@@ -7,7 +7,8 @@ train_dataset:
         {name: PreNormalize3D, args: {}},
         {name: RandomRot, args: {theta: 0.2}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        {name: UniformSampleDecode, args: {clip_len: 120}},
+        # {name: UniformSampleDecode, args: {clip_len: 90}},
+        {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
         {name: FormatGCNInput, args: {}},
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
@@ -25,7 +26,8 @@ val_dataset:
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        {name: UniformSampleDecode, args: {clip_len: 120}},
+        # {name: UniformSampleDecode, args: {clip_len: 90}},
+        {name: RandomResizedCrop, args: {p_interval: [0.95, 0.95], clip_len: 120}},
         {name: FormatGCNInput, args: {}},
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
@@ -56,7 +58,9 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_random_betas_resume/epoch-400.pth
+    encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube5_randomcrop/epoch-60.pth
+    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_randomtube6/epoch-300.pth
+    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube5/epoch-300.pth
     encoder_freeze: true
   
 # resume: save/nturgbd60_pretrain_test_bz64-lr3e-4-mask0.8-wd1e-2-L2/epoch-last.pth
