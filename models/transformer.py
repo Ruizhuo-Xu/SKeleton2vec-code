@@ -45,11 +45,10 @@ class JointEmbedding(nn.Module):
         self.spatio_pos_emb = nn.Parameter(torch.zeros(1, emb_size, 1, spatio_size))
         self.temporal_pos_emb = nn.Parameter(torch.zeros(1, emb_size,
                                                          temporal_size // temporal_segment_size, 1))
-        self.mask_token_emb = nn.Parameter(torch.zeros(1, 1, emb_size))
-        # copy from https://github.com/maoyunyao/MAMP/blob/main/model/transformer.py
+        # self.mask_token_emb = nn.Parameter(torch.zeros(1, 1, emb_size))
         trunc_normal_(self.spatio_pos_emb, std=.02)
         trunc_normal_(self.spatio_pos_emb, std=.02)
-        trunc_normal_(self.mask_token_emb, std=.02)
+        # trunc_normal_(self.mask_token_emb, std=.02)
                 
     def forward(self, x: Tensor, bool_masked_pos = None) -> Tensor:
         x = self.projection(x)
@@ -59,12 +58,12 @@ class JointEmbedding(nn.Module):
         spatio_pos_emb = rearrange(spatio_pos_emb, 'b e t v -> b (t v) e')
         temporal_pos_emb = rearrange(temporal_pos_emb, 'b e t v -> b (t v) e')
         x = rearrange(x, 'b e t v -> b (t v) e')
-        if bool_masked_pos is not None:
-            # replace mask token
-            mask_token_emb = self.mask_token_emb.expand_as(x)
-            # w = rearrange(bool_masked_pos, 'b m t v 1 -> (b m) (t v) 1').type_as(mask_token_emb)
-            w = bool_masked_pos.type_as(mask_token_emb)
-            x = x * (1 - w) + mask_token_emb * w
+        # if bool_masked_pos is not None:
+        #     # replace mask token
+        #     mask_token_emb = self.mask_token_emb.expand_as(x)
+        #     # w = rearrange(bool_masked_pos, 'b m t v 1 -> (b m) (t v) 1').type_as(mask_token_emb)
+        #     w = bool_masked_pos.type_as(mask_token_emb)
+        #     x = x * (1 - w) + mask_token_emb * w
         # add pos embedding
         x = x + spatio_pos_emb + temporal_pos_emb
         # x = rearrange(x, 'N C T V -> N (T V) C')
@@ -314,6 +313,7 @@ class SkTWithDecoder(nn.Module):
                  norm_layer = partial(nn.LayerNorm, eps=1e-6),
                  layer_scale_init_value: float = None,
                  mask_strategy: str = 'random',
+                 using_motion_head: bool = False,
                  **kwargs):
         super().__init__()
         self.spatio_size = spatio_size
@@ -321,9 +321,11 @@ class SkTWithDecoder(nn.Module):
         self.temporal_segment_size = temporal_segment_size
         self.temporal_segments = temporal_size // temporal_segment_size
         self.encoder_emb_size = encoder_emb_size
+        self.using_motion_head = using_motion_head
         assert mask_strategy in ['random', 'tube'],\
             f'Unknown mask strategy: {mask_strategy}'
         self.mask_strategy = mask_strategy
+        # encoder
         self.encoder_embedding = JointEmbedding(in_channels, temporal_segment_size,
                         spatio_size, temporal_size, encoder_emb_size)
         self.encoder = TransformerEncoder(encoder_depth,
@@ -336,6 +338,7 @@ class SkTWithDecoder(nn.Module):
                                           layer_scale_init_value=layer_scale_init_value,
                                           **kwargs)
         self.encoder_norm = norm_layer(encoder_emb_size)
+        # decoder
         self.decoder_emb_size = decoder_emb_size
         self.decoder_embedding = nn.Linear(encoder_emb_size, decoder_emb_size)
         self.decoder = TransformerEncoder(decoder_depth,
@@ -348,7 +351,11 @@ class SkTWithDecoder(nn.Module):
                                           layer_scale_init_value=layer_scale_init_value,
                                           **kwargs)
         self.decoder_norm = norm_layer(decoder_emb_size)
-        self.decoder_head = nn.Linear(decoder_emb_size, encoder_emb_size)
+        # decoder prediction head
+        self.decoder_feat_head = nn.Linear(decoder_emb_size, encoder_emb_size)
+        if using_motion_head:
+            self.decoder_motion_head = nn.Linear(decoder_emb_size,
+                                                temporal_segment_size*in_channels)
 
         self.decoder_spatio_pos_emb = nn.Parameter(torch.zeros(1, decoder_emb_size, 1, spatio_size))
         self.decoder_temporal_pos_emb = nn.Parameter(torch.zeros(1, decoder_emb_size,
@@ -474,9 +481,14 @@ class SkTWithDecoder(nn.Module):
         x = self.decoder_norm(x)
 
         # predictor projection
-        x = self.decoder_head(x)
+        res = {}
+        x_feat = self.decoder_feat_head(x)
+        res['feat'] = x_feat
+        if self.using_motion_head:
+            x_motion = self.decoder_motion_head(x)
+            res['motion'] = x_motion
 
-        return x
+        return res    
 
     def forward(self, x, mask_ratio: float = 0.8, tube_len: int = 6):
         encoder_outputs = self.forward_encoder(x, mask_ratio, tube_len)

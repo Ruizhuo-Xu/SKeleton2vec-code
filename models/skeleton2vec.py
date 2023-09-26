@@ -235,7 +235,8 @@ class Skeleton2Vec2(nn.Module):
             self.ema(self.auto_encoder)
 
     def forward(self, src: torch.Tensor, mask_ratio: float = 0.,
-                tube_len: int = 6, num_masked_views: int = 1, **kwargs):
+                tube_len: int = 6, num_masked_views: int = 1,
+                motion: torch.Tensor = None, norm_motion: bool = True, **kwargs):
         """
         Data2Vec forward method.
 
@@ -274,9 +275,20 @@ class Skeleton2Vec2(nn.Module):
 
         y = y.repeat_interleave(num_masked_views, dim=0)
         mask = mask.flatten().bool()
-        x = rearrange(x, 'b n c -> (b n) c')[mask]
+        for key, value in x.items():
+            x[key] = rearrange(value, 'b n c -> (b n) c')[mask]
         y = rearrange(y, 'b n c -> (b n) c')[mask]
-        return x, y
+        loss = {}
+        loss['feat'] = F.mse_loss(x['feat'], y)
+        if x.get('motion', None) is not None and motion is not None:
+            s = self.auto_encoder.temporal_segment_size
+            y_motion = rearrange(motion, 'b n m (t s) v c -> (b n m t v) (s c)', s=s)[mask]
+            if norm_motion:
+                mean = y_motion.mean(dim=-1, keepdim=True)
+                var = y_motion.var(dim=-1, keepdim=True)
+                y_motion = (y_motion - mean) / ((var + 1e-6) ** 0.5)
+            loss['motion'] = F.mse_loss(x['motion'], y_motion)
+        return loss
 
 
 if __name__ == '__main__':

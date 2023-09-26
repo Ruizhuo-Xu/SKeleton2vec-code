@@ -134,6 +134,30 @@ class RandomRot:
         return results
 
 
+@pipelines.register('ToMotion')
+class ToMotion:
+
+    def __init__(self, dataset='nturgb+d', source='keypoint', target='motion'):
+        self.dataset = dataset
+        self.source = source
+        self.target = target
+
+    def __call__(self, results):
+        data = results[self.source]
+        M, T, V, C = data.shape
+        motion = np.zeros_like(data)
+
+        assert C in [2, 3]
+        motion[:, :T - 1] = np.diff(data, axis=1)
+        # if C == 3 and self.dataset in ['openpose', 'coco']:
+        #     score = (data[:, :T - 1, :, 2] + data[:, 1:, :, 2]) / 2
+        #     motion[:, :T - 1, :, 2] = score
+
+        results[self.target] = motion
+
+        return results
+
+
 @pipelines.register('MergeSkeFeat')
 class MergeSkeFeat:
     def __init__(self, feat_list=['keypoint'], target='keypoint', axis=-1):
@@ -162,8 +186,8 @@ class GenSkeFeat:
         # if 'b' in feats or 'bm' in feats:
         #     ops.append(JointToBone(dataset=dataset, target='b'))
         ops.append(Rename({'keypoint': 'j'}))
-        # if 'jm' in feats:
-        #     ops.append(ToMotion(dataset=dataset, source='j', target='jm'))
+        if 'jm' in feats:
+            ops.append(ToMotion(dataset=dataset, source='j', target='jm'))
         # if 'bm' in feats:
         #     ops.append(ToMotion(dataset=dataset, source='b', target='bm'))
         ops.append(MergeSkeFeat(feat_list=feats, axis=axis))
@@ -183,10 +207,11 @@ class GenSkeFeat:
 class FormatGCNInput:
     """Format final skeleton shape to the given input_format. """
 
-    def __init__(self, num_person=2, mode='zero'):
+    def __init__(self, num_person=2, mode='zero', keys=['keypoint']):
         self.num_person = num_person
         assert mode in ['zero', 'loop']
         self.mode = mode
+        self.keys = keys
 
     def __call__(self, results):
         """Performs the FormatShape formatting.
@@ -195,27 +220,28 @@ class FormatGCNInput:
             results (dict): The resulting dict to be modified and passed
                 to the next transform in pipeline.
         """
-        keypoint = results['keypoint']
-        if 'keypoint_score' in results:
-            keypoint = np.concatenate((keypoint, results['keypoint_score'][..., None]), axis=-1)
+        for key in self.keys:
+            keypoint = results[key]
+            # if 'keypoint_score' in results:
+            #     keypoint = np.concatenate((keypoint, results['keypoint_score'][..., None]), axis=-1)
 
-        # M T V C
-        if keypoint.shape[0] < self.num_person:
-            pad_dim = self.num_person - keypoint.shape[0]
-            pad = np.zeros((pad_dim, ) + keypoint.shape[1:], dtype=keypoint.dtype)
-            keypoint = np.concatenate((keypoint, pad), axis=0)
-            if self.mode == 'loop' and keypoint.shape[0] == 1:
-                for i in range(1, self.num_person):
-                    keypoint[i] = keypoint[0]
+            # M T V C
+            if keypoint.shape[0] < self.num_person:
+                pad_dim = self.num_person - keypoint.shape[0]
+                pad = np.zeros((pad_dim, ) + keypoint.shape[1:], dtype=keypoint.dtype)
+                keypoint = np.concatenate((keypoint, pad), axis=0)
+                if self.mode == 'loop' and keypoint.shape[0] == 1:
+                    for i in range(1, self.num_person):
+                        keypoint[i] = keypoint[0]
 
-        elif keypoint.shape[0] > self.num_person:
-            keypoint = keypoint[:self.num_person]
+            elif keypoint.shape[0] > self.num_person:
+                keypoint = keypoint[:self.num_person]
 
-        M, T, V, C = keypoint.shape
-        nc = results.get('num_clips', 1)
-        assert T % nc == 0
-        keypoint = keypoint.reshape((M, nc, T // nc, V, C)).transpose(1, 0, 2, 3, 4)
-        results['keypoint'] = np.ascontiguousarray(keypoint)
+            M, T, V, C = keypoint.shape
+            nc = results.get('num_clips', 1)
+            assert T % nc == 0
+            keypoint = keypoint.reshape((M, nc, T // nc, V, C)).transpose(1, 0, 2, 3, 4)
+            results[key] = np.ascontiguousarray(keypoint)
         return results
 
     def __repr__(self):

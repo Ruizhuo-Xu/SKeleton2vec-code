@@ -135,7 +135,7 @@ def train(train_loader, model, optimizer,
     train_acc = utils.Accuracy()
     grad_norm_rec = []
 
-    with tqdm(train_loader,leave=False, desc='train') as t:
+    with tqdm(train_loader,leave=False, desc='train', ascii=True) as t:
         for iter_step, batch in enumerate(t):
             if isinstance(lr_scheduler, utils.CosineDecayWithWarmup) and lr_scheduler.mode == 'step':
                 lr_scheduler.step(iter_step / len(train_loader) + epoch)
@@ -184,7 +184,7 @@ def validate(val_loader, model, enable_amp=False):
     val_loss = utils.Averager()
     val_acc = utils.Accuracy()
 
-    with tqdm(val_loader, leave=False, desc='val') as t:
+    with tqdm(val_loader, leave=False, desc='val', ascii=True) as t:
         for batch in t:
             for k, v in batch.items():
                 batch[k] = v.cuda()

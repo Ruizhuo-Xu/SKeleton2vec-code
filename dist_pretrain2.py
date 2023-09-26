@@ -42,6 +42,12 @@ def ddp_reduce(x):
     return res.item()
 
 
+def ddp_reduce_averger(v, n):
+    v = ddp_reduce(v)
+    n = ddp_reduce(n)
+    return v / n
+
+
 def make_data_loader(spec, tag=''):
     if spec is None:
         return None
@@ -117,13 +123,15 @@ def train(train_loader, model, optimizer,
           loss_scaler, enable_amp=False,
           epoch=None, lr_scheduler=None):
     model.train()
-    if config.get('smooth_l1_beta'):
-        beta = config['smooth_l1_beta']
-        loss_fn = nn.SmoothL1Loss(beta=beta)
-        if dist.get_rank() == 0 and epoch == 0:
-            log(f'Using SmoothL1 Loss, beta:{beta}')
-    else:
-        loss_fn = nn.MSELoss()
+    # if config.get('smooth_l1_beta'):
+    #     beta = config['smooth_l1_beta']
+    #     loss_fn = nn.SmoothL1Loss(beta=beta)
+    #     if dist.get_rank() == 0 and epoch == 0:
+    #         log(f'Using SmoothL1 Loss, beta:{beta}')
+    # else:
+    #     loss_fn = nn.MSELoss()
+    feat_loss = utils.Averager()
+    motion_loss = utils.Averager()
     train_loss = utils.Averager()
 
     grad_accum_steps = config.get('grad_accum_steps', 1)
@@ -131,12 +139,14 @@ def train(train_loader, model, optimizer,
     tube_len = config.get('tube_len', 6)
     num_masked_views = config.get('num_masked_views', 1)
     clip_grad = config.get('clip_grad')
+    motion_loss_weight = config.get('motion_loss_weight', 1.0)
     if dist.get_rank() == 0 and epoch == 0:
         log(f'grad_accum_steps={grad_accum_steps}, '
             f'mask_ratio={mask_ratio}, '
             f'num_masked_views={num_masked_views}, '
             f'clip_grad={clip_grad}, '
-            f'tube_len={tube_len}')
+            f'tube_len={tube_len}, '
+            f'motion_loss_weight={motion_loss_weight}')
     grad_norm_rec = []
 
     with tqdm(train_loader, leave=False, desc='train', ascii=True) as t:
@@ -147,26 +157,27 @@ def train(train_loader, model, optimizer,
             for k, v in batch.items():
                 batch[k] = v.cuda()
 
-            # src = batch['keypoint_mask']
             src = batch['keypoint']
-            # mask = batch['mask']
-            # num_clips == 1
-            # assert src.shape[1] == 1
-            # src = src[:, 0]
-            # trg = trg[:, 0]
-            # mask = mask[:, 0]
+            motion = batch.get('motion')
             with torch.cuda.amp.autocast(enabled=enable_amp):
                 if config.get('random_tube'):
                     tube_list = [1, 2, 3, 5, 6]
                     tube_len = random.sample(tube_list, k=1)[0]
-                x, y = model(src, mask_ratio=mask_ratio,
+                _loss = model(src, mask_ratio=mask_ratio,
                              tube_len=tube_len,
-                             num_masked_views=num_masked_views)
-                loss = loss_fn(x.float(), y.float())
+                             num_masked_views=num_masked_views,
+                             motion=motion)
+                # loss = loss_fn(x.float(), y.float())
+                # loss = 0
+                # for key, value in loss_.items():
+                #     loss += loss['feat']
+                loss = _loss['feat'] + _loss['motion'] * motion_loss_weight
             loss = loss / grad_accum_steps
             if not math.isfinite(loss.item()):
                 print("Loss is {}, stopping training".format(loss.item()), force=True)
                 sys.exit(1)
+            feat_loss.add(_loss['feat'].item())
+            motion_loss.add(_loss['motion'].item())
             train_loss.add(loss.item())
 
             update_grad = (iter_step + 1) % grad_accum_steps == 0
@@ -187,6 +198,8 @@ def train(train_loader, model, optimizer,
                 # torch.cuda.synchronize()
                 current_lr = optimizer.param_groups[0]['lr']
                 tqdm.set_postfix(t, {'loss': train_loss.item(),
+                                    'feat_loss': feat_loss.item(),
+                                    'motion_loss': motion_loss.item(),
                                     'lr': current_lr,
                                     'ema_decay': ema_decay,
                                     'grad_norm': grad_norm.item(),
@@ -197,7 +210,7 @@ def train(train_loader, model, optimizer,
         log(f'Epoch {epoch+1}, grad norm average: {grad_norm_avg:.4f}, '
             f'min: {min(grad_norm_rec):.4f}, max: {max(grad_norm_rec):.4f}')
 
-    return train_loss
+    return train_loss, feat_loss, motion_loss
 
 
 @torch.no_grad()
@@ -270,7 +283,7 @@ def main(rank, world_size, config_, save_path, args):
         t_epoch_start = timer.t()
         log_info = ['epoch {}/{}'.format(epoch, epoch_max)]
         train_loader.sampler.set_epoch(epoch)
-        train_loss = train(
+        train_loss, feat_loss, motion_loss = train(
             train_loader, model, optimizer,
             loss_scaler, args.enable_amp,
             epoch - 1, lr_scheduler)
@@ -281,15 +294,19 @@ def main(rank, world_size, config_, save_path, args):
             lr_scheduler.step()
         elif isinstance(lr_scheduler, utils.CosineDecayWithWarmup) and lr_scheduler.mode == 'epoch':
             lr_scheduler.step()
-        v = ddp_reduce(train_loss.v)
-        n = ddp_reduce(train_loss.n)
+        train_loss = ddp_reduce_averger(train_loss.v, train_loss.n)
+        feat_loss = ddp_reduce_averger(feat_loss.v, feat_loss.n)
+        motion_loss = ddp_reduce_averger(motion_loss.v, motion_loss.n)
         if rank == 0:
             # print(v, n, correct_num, total_num)
-            train_loss = (v / n)
             log_info.append(f'train: loss={train_loss:.4f}')
+            log_info.append(f'train: feat_loss={feat_loss:.4f}')
+            log_info.append(f'train: motion_loss={motion_loss:.4f}')
             log_info.append(f'train: lr={current_lr:.6f}')
             log_info.append(f'train: ema_decay={ema_decay:.6f}')
             wandb.log({'train/loss': train_loss}, epoch)
+            wandb.log({'train/feat_loss': feat_loss}, epoch)
+            wandb.log({'train/motion_loss': motion_loss}, epoch)
             wandb.log({'train/lr': current_lr}, epoch)
             wandb.log({'train/ema': ema_decay}, epoch)
 
@@ -307,22 +324,22 @@ def main(rank, world_size, config_, save_path, args):
 
         if rank == 0:
             torch.save(sv_file, os.path.join(save_path, 'epoch-last.pth'))
-            if (epoch_save is not None) and (epoch % epoch_save == 0):
+            if (epoch_save is not None) and (epoch in epoch_save):
                 torch.save(sv_file,
                     os.path.join(save_path, 'epoch-{}.pth'.format(epoch)))
 
-        if (epoch_val is not None) and (epoch % epoch_val == 0):
-            val_loss = validate(val_loader, model, args.enable_amp)
-            v = ddp_reduce(val_loss.v)
-            n = ddp_reduce(val_loss.n)
-            if rank == 0:
-                # print(v, n, correct_num, total_num)
-                val_loss = (v / n)
-                log_info.append(f'val: loss={val_loss:.4f}')
-                wandb.log({'val/loss': val_loss}, epoch)
-                if val_loss < min_val_v:
-                    min_val_v = val_loss
-                    torch.save(sv_file, os.path.join(save_path, 'epoch-best.pth'))
+        # if (epoch_val is not None) and (epoch % epoch_val == 0):
+        #     val_loss = validate(val_loader, model, args.enable_amp)
+        #     v = ddp_reduce(val_loss.v)
+        #     n = ddp_reduce(val_loss.n)
+        #     if rank == 0:
+        #         # print(v, n, correct_num, total_num)
+        #         val_loss = (v / n)
+        #         log_info.append(f'val: loss={val_loss:.4f}')
+        #         wandb.log({'val/loss': val_loss}, epoch)
+        #         if val_loss < min_val_v:
+        #             min_val_v = val_loss
+        #             torch.save(sv_file, os.path.join(save_path, 'epoch-best.pth'))
 
         t = timer.t()
         prog = (epoch - epoch_start + 1) / (epoch_max - epoch_start + 1)

@@ -7,8 +7,8 @@ train_dataset:
         {name: PreNormalize3D, args: {}},
         {name: RandomRot, args: {theta: 0.2}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        # {name: UniformSampleDecode, args: {clip_len: 90}},
-        {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
+        {name: UniformSampleDecode, args: {clip_len: 90}},
+        # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
         {name: FormatGCNInput, args: {}},
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
@@ -26,8 +26,8 @@ val_dataset:
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        # {name: UniformSampleDecode, args: {clip_len: 90}},
-        {name: RandomResizedCrop, args: {p_interval: [0.95, 0.95], clip_len: 120}},
+        {name: UniformSampleDecode, args: {clip_len: 90}},
+        # {name: RandomResizedCrop, args: {p_interval: [0.95, 0.95], clip_len: 120}},
         {name: FormatGCNInput, args: {}},
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
@@ -43,9 +43,9 @@ model:
       name: SkT
       args:
         in_channels: 3
-        temporal_segment_size: 4
+        temporal_segment_size: 3
         spatio_size: 25
-        temporal_size: 120
+        temporal_size: 90
         emb_size: 256
         depth: 8
         num_heads: 8
@@ -58,7 +58,7 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube5_randomcrop/epoch-60.pth
+    encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_6avg/epoch-80.pth
     # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_randomtube6/epoch-300.pth
     # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube5/epoch-300.pth
     encoder_freeze: true
@@ -73,19 +73,19 @@ optimizer:
     weight_decay: 0.
 epoch_max: 100
 
-# lr_scheduler:
-#   name: CosineDecayWithWarmup
-#   args:
-#     warmup_epochs: 0
-#     max_epochs: 100
-#     base_lr: 0.1
-#     min_lr: 0.
-#     mode: step
 lr_scheduler:
-  name: MultiStepLr
+  name: CosineDecayWithWarmup
   args:
-    milestones: [10, 30, 50]
-    gamma: 0.1
+    warmup_epochs: 0
+    max_epochs: 100
+    base_lr: 0.1
+    min_lr: 0.
+    mode: step
+# lr_scheduler:
+#   name: MultiStepLr
+#   args:
+#     milestones: [10, 30, 50]
+#     gamma: 0.1
     
 
 label_smoothing: 0.

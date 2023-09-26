@@ -9,9 +9,10 @@ train_dataset:
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
-        {name: FormatGCNInput, args: {}},
-        {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
-        {name: ToTensor, args: {keys: [keypoint, label]}},
+        {name: ToMotion, args: {}},
+        {name: FormatGCNInput, args: {keys: ['keypoint', 'motion']}},
+        {name: Collect, args: {keys: [keypoint, motion, label], meta_keys: []}},
+        {name: ToTensor, args: {keys: [keypoint, motion, label]}},
       ]
       split: xsub_train
       # first_k: 100
@@ -28,9 +29,10 @@ val_dataset:
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
-        {name: FormatGCNInput, args: {}},
-        {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
-        {name: ToTensor, args: {keys: [keypoint, label]}},
+        {name: ToMotion, args: {}},
+        {name: FormatGCNInput, args: {keys: ['keypoint', 'motion']}},
+        {name: Collect, args: {keys: [keypoint, motion, label], meta_keys: []}},
+        {name: ToTensor, args: {keys: [keypoint, motion, label]}},
       ]
       split: xsub_val
   batch_size: 8
@@ -53,16 +55,17 @@ model:
         num_heads: 8
         att_drop_p: 0.
         forward_drop_p: 0.
-        drop_path_p: 0.2
+        drop_path_p: 0.
         layer_scale_init_value: 1.e-4
         mask_strategy: 'tube'
+        using_motion_head: true
     ema_spec:
       name: EMA
       args:
         ema_decay: 0.9998
         ema_end_decay: 0.99999
         ema_anneal_end_step: 20000
-    average_top_k_layers: 6
+    average_top_k_layers: 8
     norm_target_per_layer: layer_norm
     normalize_targets: true
   
@@ -71,7 +74,7 @@ model:
 optimizer:
   name: adamw
   args:
-    lr: 5.e-4
+    lr: 1.e-3
     betas: [0.9, 0.95]
     weight_decay: 5.e-2
 
@@ -80,17 +83,18 @@ lr_scheduler:
   args:
     warmup_epochs: 20
     max_epochs: 400
-    base_lr: 5.e-4
-    min_lr: 1.e-5
+    base_lr: 1.e-3
+    min_lr: 5.e-4
     mode: step
 
 mask_ratio: 0.90
 tube_len: 5
+motion_loss_weight: 1.0
 random_tube: false
 num_masked_views: 1
 grad_accum_steps: 1
 # smooth_l1_beta: 1.
-clip_grad: 3.0
+clip_grad: 4.0
 epoch_max: 400
 epoch_val: 1000
-epoch_save: 20
+epoch_save: [2, 60, 100, 200, 300, 400]
