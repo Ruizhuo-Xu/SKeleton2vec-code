@@ -31,7 +31,7 @@ class JointEmbedding(nn.Module):
         self.temporal_segment_size = temporal_segment_size
         super().__init__()
         self.projection = nn.Sequential(
-            Rearrange('B M T V C -> (B M) C T V'),
+            Rearrange('B N M T V C -> (B N M) C T V'),
             # using a conv layer instead of a linear one -> performance gains
             nn.Conv2d(in_channels, emb_size,
                       kernel_size=(temporal_segment_size, 1),
@@ -487,7 +487,7 @@ class SkTWithDecoder(nn.Module):
 
         return pred, mask
 
-        
+
 @models.register('SkTForClassification')
 class SkTForClassification(nn.Module):
     def __init__(self,
@@ -529,21 +529,27 @@ class SkTForClassification(nn.Module):
             trunc_normal_(m.weight, std=.02)
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
-    # def _init_weights(self, m):
-    #     if isinstance(m, nn.Linear):
-    #         # we use xavier_uniform following official JAX ViT:
-    #         torch.nn.init.xavier_uniform_(m.weight)
-    #         if isinstance(m, nn.Linear) and m.bias is not None:
-    #             nn.init.constant_(m.bias, 0)
-    #     elif isinstance(m, nn.LayerNorm):
-    #         nn.init.constant_(m.bias, 0)
-    #         nn.init.constant_(m.weight, 1.0)
+    
+    def extract_feat(self, x):
+        return self.encoder.forward_encoder(x)['last_hidden_state']
+
+    def forward_train(self, x):
+        feat = self.extract_feat(x)
+        return self.cls_head(feat)
+
+    def forward_test(self, x):
+        B, NC, M, T, V, C = x.shape
+        feat = self.extract_feat(x)
+        cls_score = self.cls_head(feat)
+        cls_score = rearrange(cls_score, '(b nc) e -> b nc e', b=B, nc=NC)
+        cls_score = cls_score.mean(dim=1)
+        return cls_score
 
     def forward(self, x: torch.Tensor):
-        out = self.encoder.forward_encoder(x)
-        hidden_state = out['last_hidden_state']
-        cls_head_out = self.cls_head(hidden_state)
-        return cls_head_out
+        if self.training:
+            return self.forward_train(x)
+        else:
+            return self.forward_test(x)
 
 
 if __name__ == '__main__':

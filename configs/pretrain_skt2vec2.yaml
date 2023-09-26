@@ -7,8 +7,8 @@ train_dataset:
         {name: PreNormalize3D, args: {}},
         {name: RandomRot, args: {theta: 0.3}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
-        # {name: UniformSampleDecode, args: {clip_len: 90}},
+        # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
+        {name: UniformSampleDecode, args: {clip_len: 90}},
         {name: FormatGCNInput, args: {}},
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
@@ -26,8 +26,8 @@ val_dataset:
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
-        # {name: UniformSampleDecode, args: {clip_len: 90}},
+        # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
+        {name: UniformSampleDecode, args: {clip_len: 90}},
         {name: FormatGCNInput, args: {}},
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
@@ -43,9 +43,9 @@ model:
       name: SkTWithDecoder
       args: 
         in_channels: 3
-        temporal_segment_size: 4
+        temporal_segment_size: 3
         spatio_size: 25
-        temporal_size: 120
+        temporal_size: 90
         encoder_emb_size: 256
         decoder_emb_size: 256
         encoder_depth: 8
@@ -62,7 +62,7 @@ model:
         ema_decay: 0.9998
         ema_end_decay: 0.99999
         ema_anneal_end_step: 20000
-    average_top_k_layers: 8
+    average_top_k_layers: 6
     norm_target_per_layer: layer_norm
     normalize_targets: true
   

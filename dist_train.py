@@ -118,8 +118,8 @@ def train(train_loader, model, optimizer,
           epoch=None, lr_scheduler=None):
     train_mode = config.get('mode')
     if train_mode == 'linear_probe':
-        model.eval()
-        model.module.cls_head.train()
+        model.train()
+        model.module.encoder.eval()
         if dist.get_rank() == 0 and epoch == 0:
             log(f'Linear probe mode.')
     else:
@@ -144,8 +144,8 @@ def train(train_loader, model, optimizer,
 
             inp = batch['keypoint']
             # num_clips == 1
-            assert inp.shape[1] == 1
-            inp = inp[:, 0]
+            # assert inp.shape[1] == 1
+            # inp = inp[:, 0]
             labels = batch['label'].squeeze(-1)
             with torch.cuda.amp.autocast(enabled=enabble_amp):
                 logits = model(inp)
@@ -190,8 +190,8 @@ def validate(val_loader, model, enable_amp=False):
                 batch[k] = v.cuda()
             inp = batch['keypoint']
             # num_clips == 1
-            assert inp.shape[1] == 1
-            inp = inp[:, 0]
+            # assert inp.shape[1] == 1
+            # inp = inp[:, 0]
             labels = batch['label'].squeeze(-1)
             with torch.cuda.amp.autocast(enabled=enable_amp):
                 logits = model(inp)

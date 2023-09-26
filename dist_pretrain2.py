@@ -151,8 +151,8 @@ def train(train_loader, model, optimizer,
             src = batch['keypoint']
             # mask = batch['mask']
             # num_clips == 1
-            assert src.shape[1] == 1
-            src = src[:, 0]
+            # assert src.shape[1] == 1
+            # src = src[:, 0]
             # trg = trg[:, 0]
             # mask = mask[:, 0]
             with torch.cuda.amp.autocast(enabled=enable_amp):
@@ -219,8 +219,8 @@ def validate(val_loader, model, enable_amp=False):
             src = batch['keypoint']
             # mask = batch['mask']
             # num_clips == 1
-            assert src.shape[1] == 1
-            src = src[:, 0]
+            # assert src.shape[1] == 1
+            # src = src[:, 0]
             # trg = trg[:, 0]
             # mask = mask[:, 0]
             with torch.cuda.amp.autocast(enabled=enable_amp):
