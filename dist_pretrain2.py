@@ -163,21 +163,22 @@ def train(train_loader, model, optimizer,
                 if config.get('random_tube'):
                     tube_list = [1, 2, 3, 5, 6]
                     tube_len = random.sample(tube_list, k=1)[0]
-                _loss = model(src, mask_ratio=mask_ratio,
-                             tube_len=tube_len,
-                             num_masked_views=num_masked_views,
-                             motion=motion)
+                losses = model(src, mask_ratio=mask_ratio,
+                               tube_len=tube_len,
+                               num_masked_views=num_masked_views,
+                               motion=motion)
+                loss = None
+                loss_feat = losses.get('feat', torch.tensor(0))
+                loss_motion = losses.get('motion', torch.tensor(0))
                 # loss = loss_fn(x.float(), y.float())
-                # loss = 0
-                # for key, value in loss_.items():
-                #     loss += loss['feat']
-                loss = _loss['feat'] + _loss['motion'] * motion_loss_weight
+                loss = loss_feat + loss_motion * motion_loss_weight
+                # loss = _loss['motion'] * motion_loss_weight
             loss = loss / grad_accum_steps
             if not math.isfinite(loss.item()):
                 print("Loss is {}, stopping training".format(loss.item()), force=True)
                 sys.exit(1)
-            feat_loss.add(_loss['feat'].item())
-            motion_loss.add(_loss['motion'].item())
+            feat_loss.add(loss_feat.item())
+            motion_loss.add(loss_motion.item())
             train_loss.add(loss.item())
 
             update_grad = (iter_step + 1) % grad_accum_steps == 0
@@ -191,11 +192,12 @@ def train(train_loader, model, optimizer,
                 grad_norm_rec.append(grad_norm.item())
                 # EMA update
                 ema_decay = model.module.ema.decay
-                if ema_decay != 1:
-                    model.module.ema_step()
-                else:
-                    raise
-                # torch.cuda.synchronize()
+                model.module.ema_step()
+                # if ema_decay <= 1.0:
+                #     model.module.ema_step()
+                # else:
+                #     model.module.ema.decay = 1.0
+                #     model.module.ema_step()
                 current_lr = optimizer.param_groups[0]['lr']
                 tqdm.set_postfix(t, {'loss': train_loss.item(),
                                     'feat_loss': feat_loss.item(),
@@ -204,7 +206,7 @@ def train(train_loader, model, optimizer,
                                     'ema_decay': ema_decay,
                                     'grad_norm': grad_norm.item(),
                                     'tube_len': tube_len})
-            x = None; y = None; loss = None
+            # torch.cuda.empty_cache()
     if dist.get_rank() == 0:
         grad_norm_avg = sum(grad_norm_rec) / len(grad_norm_rec)
         log(f'Epoch {epoch+1}, grad norm average: {grad_norm_avg:.4f}, '
@@ -267,7 +269,8 @@ def main(rank, world_size, config_, save_path, args):
     train_loader, val_loader = make_data_loaders()
     model, optimizer, epoch_start, lr_scheduler, loss_scaler = prepare_training()
     model = model.cuda()
-    model = DDP(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
+    # model = DDP(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
+    model = DDP(model, device_ids=[rank], output_device=rank)
     if args.compile:
         if rank == 0:
             log('Compiling model...')

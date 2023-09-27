@@ -313,6 +313,7 @@ class SkTWithDecoder(nn.Module):
                  norm_layer = partial(nn.LayerNorm, eps=1e-6),
                  layer_scale_init_value: float = None,
                  mask_strategy: str = 'random',
+                 using_feat_head: bool = True,
                  using_motion_head: bool = False,
                  **kwargs):
         super().__init__()
@@ -322,6 +323,7 @@ class SkTWithDecoder(nn.Module):
         self.temporal_segments = temporal_size // temporal_segment_size
         self.encoder_emb_size = encoder_emb_size
         self.using_motion_head = using_motion_head
+        self.using_feat_head = using_feat_head
         assert mask_strategy in ['random', 'tube'],\
             f'Unknown mask strategy: {mask_strategy}'
         self.mask_strategy = mask_strategy
@@ -352,7 +354,8 @@ class SkTWithDecoder(nn.Module):
                                           **kwargs)
         self.decoder_norm = norm_layer(decoder_emb_size)
         # decoder prediction head
-        self.decoder_feat_head = nn.Linear(decoder_emb_size, encoder_emb_size)
+        if using_feat_head:
+            self.decoder_feat_head = nn.Linear(decoder_emb_size, encoder_emb_size)
         if using_motion_head:
             self.decoder_motion_head = nn.Linear(decoder_emb_size,
                                                 temporal_segment_size*in_channels)
@@ -482,8 +485,9 @@ class SkTWithDecoder(nn.Module):
 
         # predictor projection
         res = {}
-        x_feat = self.decoder_feat_head(x)
-        res['feat'] = x_feat
+        if self.using_feat_head:
+            x_feat = self.decoder_feat_head(x)
+            res['feat'] = x_feat
         if self.using_motion_head:
             x_motion = self.decoder_motion_head(x)
             res['motion'] = x_motion

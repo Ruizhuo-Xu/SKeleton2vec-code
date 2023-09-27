@@ -195,14 +195,6 @@ class Skeleton2Vec2(nn.Module):
         self.ema_end_decay = self.ema.ema_end_decay
         self.ema_anneal_end_step = self.ema.ema_anneal_end_step
     
-    # def fix_init_weight(self):
-    #     def rescale(param, layer_id):
-    #         param.div_(math.sqrt(2.0 * layer_id))
-
-    #     for layer_id, layer in enumerate(self.encoder.encoder.layers):
-    #         rescale(layer.attn.proj.weight.data, layer_id + 1)
-    #         rescale(layer.mlp.fc2.weight.data, layer_id + 1)
-
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
@@ -231,8 +223,8 @@ class Skeleton2Vec2(nn.Module):
                     self.ema_anneal_end_step,
                 )
             self.ema.decay = decay
-        if self.ema.decay < 1:
-            self.ema(self.auto_encoder)
+        # if self.ema.decay <= 1:
+        self.ema(self.auto_encoder)
 
     def forward(self, src: torch.Tensor, mask_ratio: float = 0.,
                 tube_len: int = 6, num_masked_views: int = 1,
@@ -253,42 +245,44 @@ class Skeleton2Vec2(nn.Module):
         # Multi-mask Training (data2vec2.0)
         src_repeat = src.repeat_interleave(num_masked_views, dim=0)
         x, mask = self.auto_encoder(src_repeat, mask_ratio=mask_ratio, tube_len=tube_len)  # fetch the last layer outputs
-
-        # model forward in offline mode (teacher)
-        with torch.no_grad():
-            self.ema.model.eval()
-            y = self.ema.model.forward_encoder(src, mask_ratio=0., output_hidden_states=True)['hidden_states']  # fetch the last transformer layers outputs
-            y = y[-self.average_top_k_layers:]  # take the last k transformer layers
-
-            if self.norm_target_per_layer == 'layer_norm':
-                y = [F.layer_norm(tl.float(), tl.shape[-1:]) for tl in y]
-                y = sum(y) / len(y)
-            elif self.norm_target_per_layer == 'instance_norm':
-                y = [rearrange(tl, 'b n c -> b c n') for tl in y]
-                y = [F.instance_norm(tl.float()) for tl in y]
-                y = [rearrange(tl, 'b c n -> b n c') for tl in y]
-                y = sum(y) / len(y)
-            else:
-                raise NotImplementedError
-            if self.normalize_targets:
-                y = F.layer_norm(y.float(), y.shape[-1:])
-
-        y = y.repeat_interleave(num_masked_views, dim=0)
         mask = mask.flatten().bool()
         for key, value in x.items():
             x[key] = rearrange(value, 'b n c -> (b n) c')[mask]
-        y = rearrange(y, 'b n c -> (b n) c')[mask]
-        loss = {}
-        loss['feat'] = F.mse_loss(x['feat'], y)
-        if x.get('motion', None) is not None and motion is not None:
+
+        losses = {}
+        # model forward in offline mode (teacher)
+        if self.auto_encoder.using_feat_head:
+            with torch.no_grad():
+                self.ema.model.eval()
+                y = self.ema.model.forward_encoder(src, mask_ratio=0., output_hidden_states=True)['hidden_states']  # fetch the last transformer layers outputs
+                y = y[-self.average_top_k_layers:]  # take the last k transformer layers
+
+                if self.norm_target_per_layer == 'layer_norm':
+                    y = [F.layer_norm(tl.float(), tl.shape[-1:]) for tl in y]
+                    y = sum(y) / len(y)
+                elif self.norm_target_per_layer == 'instance_norm':
+                    y = [rearrange(tl, 'b n c -> b c n') for tl in y]
+                    y = [F.instance_norm(tl.float()) for tl in y]
+                    y = [rearrange(tl, 'b c n -> b n c') for tl in y]
+                    y = sum(y) / len(y)
+                else:
+                    raise NotImplementedError
+                if self.normalize_targets:
+                    y = F.layer_norm(y.float(), y.shape[-1:])
+
+            y = y.repeat_interleave(num_masked_views, dim=0)
+            y = rearrange(y, 'b n c -> (b n) c')[mask]
+            losses['feat'] = F.mse_loss(x['feat'], y)
+
+        if self.auto_encoder.using_motion_head and motion is not None:
             s = self.auto_encoder.temporal_segment_size
             y_motion = rearrange(motion, 'b n m (t s) v c -> (b n m t v) (s c)', s=s)[mask]
             if norm_motion:
                 mean = y_motion.mean(dim=-1, keepdim=True)
                 var = y_motion.var(dim=-1, keepdim=True)
                 y_motion = (y_motion - mean) / ((var + 1e-6) ** 0.5)
-            loss['motion'] = F.mse_loss(x['motion'], y_motion)
-        return loss
+            losses['motion'] = F.mse_loss(x['motion'], y_motion)
+        return losses
 
 
 if __name__ == '__main__':
