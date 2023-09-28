@@ -431,6 +431,67 @@ class SkTWithDecoder(nn.Module):
         mask = rearrange(mask, 'n t v -> n (t v)')
 
         return x_masked, mask, ids_restore, ids_keep
+
+    def motion_aware_tube_masking(self, x, x_motion, mask_ratio: float = 0.9, tau: float = 0.2):
+        N, _, D = x.shape
+        TP = self.temporal_segments
+        VP = self.spatio_size
+        len_VP_keep = int(VP * (1 - mask_ratio))
+        x = rearrange(x, 'n (t v) d -> n t v d', t=TP, v=VP)
+        s = self.temporal_segment_size
+        x_motion = rearrange(x_motion, 'b n m (t s) v c -> (b n m) t v (s c)', s=s)
+        
+        # calculate the temporal attention score, based on motion intensity
+        temporal_att = x_motion.pow(2)
+        temporal_att = reduce(temporal_att, 'n t v c -> n t', 'mean')
+        temporal_att = temporal_att / (temporal_att.sum(dim=1, keepdim=True) + 1e-6)
+        # Divide segments according to attention scores
+        accumulated_att = 0
+        segment_state = torch.zeros_like(temporal_att, device=x.device)
+        for i in range(TP):
+            accumulated_att += temporal_att[:, i]
+            is_segment_end = (accumulated_att > tau)
+            if i > 0:
+                segment_state[:, i-1] = is_segment_end
+                accumulated_att = torch.where(is_segment_end, temporal_att[:, i], accumulated_att)
+            else:
+                segment_state[:, i] = is_segment_end
+                accumulated_att = torch.where(is_segment_end, 0, accumulated_att)
+        # the final frame is always the end of segment
+        segment_state[:, -1] = 1
+        masked_views = segment_state.sum(dim=1).max()
+        masked_views = int(masked_views.item())
+        segment_state_ = segment_state.cumsum(dim=1)
+        segment_state_[segment_state == 1] -= 1
+
+        noise = torch.rand(N, masked_views, VP, device=x.device)
+        # sort noise for each sample
+        ids_shuffle = torch.argsort(
+            noise, dim=-1
+        )  # ascend: small is keep, large is remove
+        ids_restore = torch.argsort(ids_shuffle, dim=-1)
+
+        ids_shuffle = torch.gather(ids_shuffle, dim=1,
+                                   index=segment_state_.unsqueeze(-1).repeat(1, 1, VP).long())
+        ids_restore = torch.gather(ids_restore, dim=1,
+                                   index=segment_state_.unsqueeze(-1).repeat(1, 1, VP).long())
+
+        # keep the first subset
+        ids_keep = ids_shuffle[:, :, :len_VP_keep]
+        x_masked = torch.gather(x.view(N, TP, VP, D), dim=2,
+                                index=ids_keep.unsqueeze(-1).repeat(1, 1, 1, D))
+        x_masked = rearrange(x_masked, 'n t v d -> n (t v) d')
+
+        # generate the binary mask: 0 is keep, 1 is remove
+        mask = torch.ones([N, TP, VP], device=x.device)
+        mask[:, :, :len_VP_keep] = 0
+        # unshuffle to get the binary mask
+        mask = torch.gather(mask, dim=2, index=ids_restore)
+        mask = rearrange(mask, 'n t v -> n (t v)')
+
+        return x_masked, mask, ids_restore, ids_keep
+
+
     
     def forward_encoder(self, x, mask_ratio: float = 0.,
                         tube_len: int = 6, output_hidden_states=True):
