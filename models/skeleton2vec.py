@@ -227,7 +227,7 @@ class Skeleton2Vec2(nn.Module):
         self.ema(self.auto_encoder)
 
     def forward(self, src: torch.Tensor, mask_ratio: float = 0.,
-                tube_len: int = 6, num_masked_views: int = 1,
+                tube_len: int = 6, tau: float = 0.2, num_masked_views: int = 1,
                 motion: torch.Tensor = None, norm_motion: bool = True, **kwargs):
         """
         Data2Vec forward method.
@@ -244,7 +244,8 @@ class Skeleton2Vec2(nn.Module):
         """
         # Multi-mask Training (data2vec2.0)
         src_repeat = src.repeat_interleave(num_masked_views, dim=0)
-        x, mask = self.auto_encoder(src_repeat, mask_ratio=mask_ratio, tube_len=tube_len)  # fetch the last layer outputs
+        x, mask = self.auto_encoder(src_repeat, mask_ratio=mask_ratio,
+                                    tube_len=tube_len, x_motion=motion, tau=tau)  # fetch the last layer outputs
         mask = mask.flatten().bool()
         for key, value in x.items():
             x[key] = rearrange(value, 'b n c -> (b n) c')[mask]

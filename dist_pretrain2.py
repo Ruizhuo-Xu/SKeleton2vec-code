@@ -140,13 +140,15 @@ def train(train_loader, model, optimizer,
     num_masked_views = config.get('num_masked_views', 1)
     clip_grad = config.get('clip_grad')
     motion_loss_weight = config.get('motion_loss_weight', 1.0)
+    tau = config.get('tau', 0.2)
     if dist.get_rank() == 0 and epoch == 0:
         log(f'grad_accum_steps={grad_accum_steps}, '
             f'mask_ratio={mask_ratio}, '
             f'num_masked_views={num_masked_views}, '
             f'clip_grad={clip_grad}, '
             f'tube_len={tube_len}, '
-            f'motion_loss_weight={motion_loss_weight}')
+            f'motion_loss_weight={motion_loss_weight}, '
+            f'tau={tau}')
     grad_norm_rec = []
 
     with tqdm(train_loader, leave=False, desc='train', ascii=True) as t:
@@ -166,7 +168,7 @@ def train(train_loader, model, optimizer,
                 losses = model(src, mask_ratio=mask_ratio,
                                tube_len=tube_len,
                                num_masked_views=num_masked_views,
-                               motion=motion)
+                               motion=motion, tau=tau)
                 loss = None
                 loss_feat = losses.get('feat', torch.tensor(0))
                 loss_motion = losses.get('motion', torch.tensor(0))
@@ -205,7 +207,8 @@ def train(train_loader, model, optimizer,
                                     'lr': current_lr,
                                     'ema_decay': ema_decay,
                                     'grad_norm': grad_norm.item(),
-                                    'tube_len': tube_len})
+                                    'tube_len': tube_len,
+                                    'tau': tau,})
             # torch.cuda.empty_cache()
     if dist.get_rank() == 0:
         grad_norm_avg = sum(grad_norm_rec) / len(grad_norm_rec)

@@ -490,17 +490,19 @@ class SkTWithDecoder(nn.Module):
         mask = rearrange(mask, 'n t v -> n (t v)')
 
         return x_masked, mask, ids_restore, ids_keep
-
-
     
     def forward_encoder(self, x, mask_ratio: float = 0.,
-                        tube_len: int = 6, output_hidden_states=True):
+                        tube_len: int = 6,
+                        x_motion: torch.Tensor = None,
+                        tau: float = 0.2, output_hidden_states=True):
         x = self.encoder_embedding(x, bool_masked_pos=None)
         if mask_ratio > 0.:
             if self.mask_strategy == 'random':
                 x, mask, id_restore, _ = self.random_masking(x, mask_ratio)
             elif self.mask_strategy == 'tube':
                 x, mask, id_restore, _ = self.tube_masking(x, mask_ratio, tube_len)
+            elif self.mask_strategy == 'motion':
+                x, mask, id_restore, _ = self.motion_aware_tube_masking(x, x_motion, mask_ratio, tau)
             else:
                 raise NotImplementedError
         else:
@@ -529,12 +531,14 @@ class SkTWithDecoder(nn.Module):
                 x_, dim=1, index=id_restore[:, :, None].repeat(1, 1, C)
             )  # unshuffle
             x = rearrange(x_, 'b (t v) c -> b c t v', t=TP, v=VP)
-        elif self.mask_strategy == 'tube':
+        elif self.mask_strategy in ['tube', 'motion']:
             x_ = rearrange(x_, 'b (t v) c -> b t v c', t=TP, v=VP)
             x_ = torch.gather(
                 x_, dim=2, index=id_restore[:, :, :, None].repeat(1, 1, 1, C)
             )
             x = rearrange(x_, 'b t v c -> b c t v')
+        else:
+            raise NotImplementedError
 
         # add pos & temp embed
         x = x + self.decoder_spatio_pos_emb + self.decoder_temporal_pos_emb
@@ -555,8 +559,9 @@ class SkTWithDecoder(nn.Module):
 
         return res    
 
-    def forward(self, x, mask_ratio: float = 0.8, tube_len: int = 6):
-        encoder_outputs = self.forward_encoder(x, mask_ratio, tube_len)
+    def forward(self, x, mask_ratio: float = 0.8, tube_len: int = 6,
+                x_motion: torch.Tensor = None, tau: float = 0.2):
+        encoder_outputs = self.forward_encoder(x, mask_ratio, tube_len, x_motion, tau)
         id_restore = encoder_outputs['id_restore']
         mask = encoder_outputs['mask']
         latent = encoder_outputs['last_hidden_state']
