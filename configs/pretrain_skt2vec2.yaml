@@ -69,7 +69,7 @@ model:
         ema_end_decay: 1.0
         ema_anneal_end_step: 100000
     average_top_k_layers: 8
-    norm_target_per_layer: layer_norm
+    norm_target_per_layer: instance_norm
     normalize_targets: true
   
 # resume: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube_resume/epoch-last.pth

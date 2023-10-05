@@ -18,6 +18,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import wandb
 from timm.loss import LabelSmoothingCrossEntropy
+import timm.optim.optim_factory as optim_factory
 
 from datasets import datasets
 from models import models
@@ -104,8 +105,14 @@ def prepare_training():
             loss_scaler.load_state_dict(sv_file['scaler'])
     else:
         model = models.make(config['model']).cuda()
+
+        # following timm: set wd as 0 for bias and norm layers
+        wd = config['optimizer']['args'].get('weight_decay', 0)
+        param_groups = optim_factory.param_groups_weight_decay(model, wd)
+        config['optimizer']['args'].pop('weight_decay')
         optimizer = utils.make_optimizer(
-            model.parameters(), config['optimizer'])
+            param_groups, config['optimizer'])
+
         epoch_start = 1
         if config.get('lr_scheduler') is None:
             lr_scheduler = None
@@ -116,6 +123,7 @@ def prepare_training():
     if dist.get_rank() == 0:
         log('model: #params={}'.format(utils.compute_num_params(model, text=True)))
         log(model)
+        log(optimizer)
     return model, optimizer, epoch_start, lr_scheduler, loss_scaler
 
 

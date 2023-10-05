@@ -243,7 +243,7 @@ class ClassificationHeadLarge(nn.Sequential):
                  num_joints: int = 25,
                  drop_p: float = 0.):
         super().__init__(
-            nn.LayerNorm(emb_size), 
+            # nn.LayerNorm(emb_size), 
             nn.Dropout(drop_p),
             Rearrange('(B M) (T J) C -> B M T J C', M=num_persons, J=num_joints),
             Reduce('B M T J C -> B M J C', reduction='mean'),
@@ -324,7 +324,7 @@ class SkTWithDecoder(nn.Module):
         self.encoder_emb_size = encoder_emb_size
         self.using_motion_head = using_motion_head
         self.using_feat_head = using_feat_head
-        assert mask_strategy in ['random', 'tube'],\
+        assert mask_strategy in ['random', 'tube', 'motion'],\
             f'Unknown mask strategy: {mask_strategy}'
         self.mask_strategy = mask_strategy
         # encoder
@@ -442,29 +442,46 @@ class SkTWithDecoder(nn.Module):
         x_motion = rearrange(x_motion, 'b n m (t s) v c -> (b n m) t v (s c)', s=s)
         
         # calculate the temporal attention score, based on motion intensity
-        temporal_att = x_motion.pow(2)
-        temporal_att = reduce(temporal_att, 'n t v c -> n t', 'mean')
-        temporal_att = temporal_att / (temporal_att.sum(dim=1, keepdim=True) + 1e-6)
-        # Divide segments according to attention scores
-        accumulated_att = 0
-        segment_state = torch.zeros_like(temporal_att, device=x.device)
+        motion_intensity = x_motion.pow(2)
+        temporal_motion_attn = reduce(motion_intensity, 'n t v c -> n t', 'mean')
+        temporal_motion_attn = temporal_motion_attn / (temporal_motion_attn.sum(dim=1, keepdim=True) + 1e-6)
+        # Divide tubes according to temporal attention scores
+        accum_temporal_attn = 0
+        segment_states = torch.zeros_like(temporal_motion_attn, device=x.device)
         for i in range(TP):
-            accumulated_att += temporal_att[:, i]
-            is_segment_end = (accumulated_att > tau)
+            accum_temporal_attn += temporal_motion_attn[:, i]
+            is_segment_end = (accum_temporal_attn > tau)
             if i > 0:
-                segment_state[:, i-1] = is_segment_end
-                accumulated_att = torch.where(is_segment_end, temporal_att[:, i], accumulated_att)
+                segment_states[:, i-1] = is_segment_end
+                accum_temporal_attn = torch.where(is_segment_end, temporal_motion_attn[:, i], accum_temporal_attn)
             else:
-                segment_state[:, i] = is_segment_end
-                accumulated_att = torch.where(is_segment_end, 0, accumulated_att)
+                segment_states[:, i] = is_segment_end
+                accum_temporal_attn = torch.where(is_segment_end, 0, accum_temporal_attn)
         # the final frame is always the end of segment
-        segment_state[:, -1] = 1
-        masked_views = segment_state.sum(dim=1).max()
+        segment_states[:, -1] = 1
+        masked_views = segment_states.sum(dim=1).max()
         masked_views = int(masked_views.item())
-        segment_state_ = segment_state.cumsum(dim=1)
-        segment_state_[segment_state == 1] -= 1
 
-        noise = torch.rand(N, masked_views, VP, device=x.device)
+        # Determine the joint to be masked according to the spatial attention score
+        spatial_motion_attn = torch.zeros((N, masked_views, VP), device=x.device)
+        masked_views_idxs = torch.zeros((N,), device=x.device).long()
+        accum_spatial_attn = 0
+        motion_intensity = reduce(motion_intensity, 'n t v c -> n t v', 'mean')
+        for i in range(TP):
+            accum_spatial_attn += motion_intensity[:, i]
+            spatial_motion_attn[torch.arange(N), masked_views_idxs] = accum_spatial_attn
+            masked_views_idxs = torch.where(segment_states[:, i].bool(), masked_views_idxs + 1, masked_views_idxs)
+            accum_spatial_attn = torch.where(segment_states[:, i, None].bool().repeat(1, 1, VP),
+                                             0, accum_spatial_attn)
+        spatial_motion_attn = spatial_motion_attn / (spatial_motion_attn.max(dim=-1, keepdim=True).values + 1e-6)
+        spatial_motion_prob = F.softmax(spatial_motion_attn, dim=-1)
+        noise = torch.log(spatial_motion_prob)\
+            - torch.log(-torch.log(torch.rand(N, masked_views, VP, device=x.device) + 1e-6) + 1e-6)
+
+        segment_state_ = segment_states.cumsum(dim=1)
+        segment_state_[segment_states == 1] -= 1
+
+        # noise = torch.rand(N, masked_views, VP, device=x.device)
         # sort noise for each sample
         ids_shuffle = torch.argsort(
             noise, dim=-1
@@ -577,10 +594,12 @@ class SkTForClassification(nn.Module):
                  cls_head_spec: dict,
                  encoder_pretrain_weight: str = None,
                  encoder_freeze: bool = False,
+                 drop_path_p: float = 0.0,
                  ):
         super().__init__()
         if encoder_pretrain_weight:
             sv_file = torch.load(encoder_pretrain_weight)
+            sv_file['model']['args']['model_spec']['args']['drop_path_p'] = drop_path_p
             loaded_model = models.make(sv_file['model'], load_sd=True)
             self.encoder = loaded_model.auto_encoder
             # self.encoder = loaded_model.ema.model

@@ -17,6 +17,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 import wandb
 from timm.loss import LabelSmoothingCrossEntropy
+import timm.optim.optim_factory as optim_factory
 
 from datasets import datasets
 from models import models
@@ -52,15 +53,7 @@ def make_data_loader(spec, tag=''):
         for k, v in dataset[0].items():
             log('  {}: shape={}'.format(k, tuple(v.shape)))
 
-    loader = utils.MultiEpochsDataLoader(
-        dataset,
-        batch_size=spec['batch_size'],
-        shuffle=False,
-        num_workers=spec.get('num_workers', 0),
-        pin_memory=True,
-        sampler=DistributedSampler(dataset)
-    )
-    # loader = DataLoader(
+    # loader = utils.MultiEpochsDataLoader(
     #     dataset,
     #     batch_size=spec['batch_size'],
     #     shuffle=False,
@@ -68,6 +61,14 @@ def make_data_loader(spec, tag=''):
     #     pin_memory=True,
     #     sampler=DistributedSampler(dataset)
     # )
+    loader = DataLoader(
+        dataset,
+        batch_size=spec['batch_size'],
+        shuffle=False,
+        num_workers=spec.get('num_workers', 0),
+        pin_memory=True,
+        sampler=DistributedSampler(dataset, shuffle=(tag=='train'))
+    )
     return loader
 
 
@@ -97,8 +98,19 @@ def prepare_training():
             loss_scaler.load_state_dict(sv_file['scaler'])
     else:
         model = models.make(config['model']).cuda()
+
+        # build optimizer with layer-wise lr decay (lrd)
+        wd = config['optimizer']['args'].get('weight_decay', 0)
+        if config.get('mode') == 'fine_tune':
+            ld = config.get('layer_decay', 0.8)
+            param_groups = utils.param_groups_lrd(model, weight_decay=wd, layer_decay=ld)
+            config['optimizer']['args'].pop('weight_decay')
+        else:
+            param_groups = optim_factory.param_groups_weight_decay(model, wd)
+            config['optimizer']['args'].pop('weight_decay')
         optimizer = utils.make_optimizer(
-            model.parameters(), config['optimizer'])
+            param_groups, config['optimizer'])
+
         epoch_start = 1
         if config.get('lr_scheduler') is None:
             lr_scheduler = None
@@ -110,6 +122,7 @@ def prepare_training():
         log('model: #total params={}'.format(utils.compute_num_params(model, text=True)))
         log('model: #train params={}'.format(utils.compute_train_num_params(model, text=True)))
         log(model)
+        log(optimizer)
     return model, optimizer, epoch_start, lr_scheduler, loss_scaler
 
 
@@ -120,10 +133,12 @@ def train(train_loader, model, optimizer,
     if train_mode == 'linear_probe':
         model.train()
         model.module.encoder.eval()
-        if dist.get_rank() == 0 and epoch == 0:
-            log(f'Linear probe mode.')
     else:
         model.train()
+
+    if dist.get_rank() == 0 and epoch == 0:
+        log(f'mode:{train_mode}')
+
     if config['label_smoothing'] > 0.:
         smoothing = config['label_smoothing']
         loss_fn = LabelSmoothingCrossEntropy(smoothing=smoothing)
@@ -226,7 +241,8 @@ def main(rank, world_size, config_, save_path, args):
     train_loader, val_loader = make_data_loaders()
     model, optimizer, epoch_start, lr_scheduler, loss_scaler = prepare_training()
     model = model.cuda()
-    model = DDP(model, device_ids=[rank], output_device=rank)
+    # model = DDP(model, device_ids=[rank], output_device=rank)
+    model = DDP(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
     if args.compile:
         if rank == 0:
             log('Compiling model...')
