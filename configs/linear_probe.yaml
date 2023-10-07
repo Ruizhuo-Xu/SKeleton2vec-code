@@ -58,10 +58,11 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    encoder_pretrain_weight: /home/rz/epoch-300.pth
+    encoder_pretrain_weight: /home/rz/epoch-last.pth
     # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_randomtube6/epoch-300.pth
     # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube5/epoch-300.pth
     encoder_freeze: true
+    drop_path_p: 0.
   
 # resume: save/nturgbd60_pretrain_test_bz64-lr3e-4-mask0.8-wd1e-2-L2/epoch-last.pth
 

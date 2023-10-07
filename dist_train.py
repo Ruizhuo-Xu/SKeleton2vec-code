@@ -106,8 +106,10 @@ def prepare_training():
             param_groups = utils.param_groups_lrd(model, weight_decay=wd, layer_decay=ld)
             config['optimizer']['args'].pop('weight_decay')
         else:
-            param_groups = optim_factory.param_groups_weight_decay(model, wd)
-            config['optimizer']['args'].pop('weight_decay')
+            param_groups = model.parameters()
+        # else:
+        #     param_groups = optim_factory.param_groups_weight_decay(model, wd)
+        #     config['optimizer']['args'].pop('weight_decay')
         optimizer = utils.make_optimizer(
             param_groups, config['optimizer'])
 

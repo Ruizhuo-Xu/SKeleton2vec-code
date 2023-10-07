@@ -614,6 +614,7 @@ class SkTForClassification(nn.Module):
                                     args={'emb_size': self.emb_size})
         if encoder_pretrain_weight:
             # if have pretrain weight, only init cls head
+            # self.cls_head.apply(self._xavier_init_weights)
             self.cls_head.apply(self._init_weights)
         else:
             self.apply(self._init_weights)
@@ -630,6 +631,16 @@ class SkTForClassification(nn.Module):
             trunc_normal_(m.weight, std=.02)
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
+
+    def _xavier_init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            # we use xavier_uniform following official JAX ViT:
+            torch.nn.init.xavier_uniform_(m.weight)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
     
     def extract_feat(self, x):
         return self.encoder.forward_encoder(x)['last_hidden_state']
