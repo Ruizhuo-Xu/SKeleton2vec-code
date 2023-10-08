@@ -612,12 +612,12 @@ class SkTForClassification(nn.Module):
 
         self.cls_head = models.make(cls_head_spec,
                                     args={'emb_size': self.emb_size})
-        if encoder_pretrain_weight:
-            # if have pretrain weight, only init cls head
-            # self.cls_head.apply(self._xavier_init_weights)
-            self.cls_head.apply(self._init_weights)
-        else:
-            self.apply(self._init_weights)
+        # if encoder_pretrain_weight:
+        #     # if have pretrain weight, only init cls head
+        #     # self.cls_head.apply(self._xavier_init_weights)
+        #     self.cls_head.apply(self._init_weights)
+        # else:
+        #     self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):

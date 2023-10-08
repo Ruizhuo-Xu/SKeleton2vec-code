@@ -208,6 +208,11 @@ class Skeleton2Vec2(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return ('auto_encoder.decoder_spatio_pos_emb', 'auto_encoder.decoder_temporal_pos_emb',
+                'auto_encoder.encoder_embedding.spatio_pos_emb', 'auto_encoder.encoder_embedding.temporal_pos_emb')
+
     def ema_step(self):
         """
         One EMA step for the offline model until the ending decay value is reached

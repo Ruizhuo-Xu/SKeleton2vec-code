@@ -107,11 +107,16 @@ def prepare_training():
         model = models.make(config['model']).cuda()
 
         # following timm: set wd as 0 for bias and norm layers
-        # wd = config['optimizer']['args'].get('weight_decay', 0)
-        # param_groups = optim_factory.param_groups_weight_decay(model, wd)
-        # config['optimizer']['args'].pop('weight_decay')
+        if config.get('weight_decay_groups', False):
+            weight_decay = config['optimizer']['args'].get('weight_decay', 0)
+            no_weight_decay_list = model.no_weight_decay()
+            param_groups = optim_factory.param_groups_weight_decay(model, weight_decay, no_weight_decay_list)
+            config['optimizer']['args'].pop('weight_decay')
+        else:
+            param_groups = model.parameters()
+
         optimizer = utils.make_optimizer(
-            model.parameters(), config['optimizer'])
+            param_groups, config['optimizer'])
 
         epoch_start = 1
         if config.get('lr_scheduler') is None:
