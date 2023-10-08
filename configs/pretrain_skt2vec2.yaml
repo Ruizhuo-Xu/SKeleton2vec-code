@@ -57,14 +57,14 @@ model:
         forward_drop_p: 0.
         drop_path_p: 0.
         layer_scale_init_value: 1.e-4
-        mask_strategy: 'motion'
+        mask_strategy: 'tube'
         using_feat_head: true
         using_motion_head: false
     ema_spec:
       name: EMA
       args:
         # ema_decay: 0.9998
-        ema_decay: 0.9999
+        ema_decay: 0.9997
         # ema_end_decay: 0.99999
         ema_end_decay: 1.0
         ema_anneal_end_step: 100000
@@ -101,4 +101,4 @@ grad_accum_steps: 1
 clip_grad: 4.0
 epoch_max: 400
 epoch_val: 1000
-epoch_save: [60, 100, 200, 300, 400]
+epoch_save: [100, 200, 300, 400]
