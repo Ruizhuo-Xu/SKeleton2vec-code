@@ -60,7 +60,7 @@ model:
         num_persons: 2
         num_joints: 25
         drop_p: 0.3
-    encoder_pretrain_weight: /home/rz/epoch-400.pth
+    encoder_pretrain_weight: /home/rz/nturgbd60_pretrain_skt2vec2_tube_800EP_256BS/epoch-800.pth
     # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_randomtube6/epoch-300.pth
     # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube5/epoch-300.pth
     encoder_freeze: false
@@ -83,8 +83,8 @@ lr_scheduler:
     min_lr: 1.e-5
     mode: step
 
-label_smoothing: 0.2
-layer_decay: 0.75
+label_smoothing: 0.1
+layer_decay: 0.80
 epoch_val: 1
 epoch_save: 200
 mode: fine_tune

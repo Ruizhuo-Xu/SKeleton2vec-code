@@ -103,7 +103,9 @@ def prepare_training():
         wd = config['optimizer']['args'].get('weight_decay', 0)
         if config.get('mode') == 'fine_tune':
             ld = config.get('layer_decay', 0.8)
-            param_groups = utils.param_groups_lrd(model, weight_decay=wd, layer_decay=ld)
+            no_weight_decay_list = model.no_weight_decay()
+            param_groups = utils.param_groups_lrd(model, weight_decay=wd, layer_decay=ld,
+                                                  no_weight_decay_list=no_weight_decay_list)
             config['optimizer']['args'].pop('weight_decay')
         else:
             param_groups = model.parameters()
