@@ -107,6 +107,7 @@ def prepare_training():
             param_groups = utils.param_groups_lrd(model, weight_decay=wd, layer_decay=ld,
                                                   no_weight_decay_list=no_weight_decay_list)
             config['optimizer']['args'].pop('weight_decay')
+            # param_groups = model.parameters()
         else:
             param_groups = model.parameters()
         # else:
@@ -189,6 +190,7 @@ def train(train_loader, model, optimizer,
                                  'grad norm': grad_norm.item()})
 
             preds = None; loss = None
+    torch.cuda.empty_cache()
     if dist.get_rank() == 0:
         grad_norm_avg = sum(grad_norm_rec) / len(grad_norm_rec)
         log(f'Epoch {epoch+1}, grad norm average: {grad_norm_avg:.4f}, '
@@ -226,6 +228,7 @@ def validate(val_loader, model, enable_amp=False):
                 'loss': val_loss.item(),
                 'val_acc': val_acc.item()})
 
+    torch.cuda.empty_cache()
     return val_loss, val_acc
         
 

@@ -642,6 +642,11 @@ class SkTForClassification(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
     
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return ('encoder.encoder_embedding.spatio_pos_emb',
+                'encoder.encoder_embedding.temporal_pos_emb')
+
     def extract_feat(self, x):
         return self.encoder.forward_encoder(x)['last_hidden_state']
 
