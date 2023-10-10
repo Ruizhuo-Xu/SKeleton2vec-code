@@ -432,7 +432,8 @@ class SkTWithDecoder(nn.Module):
 
         return x_masked, mask, ids_restore, ids_keep
 
-    def motion_aware_tube_masking(self, x, x_motion, mask_ratio: float = 0.9, tau: float = 0.2):
+    def motion_aware_tube_masking(self, x, x_motion,
+                                  mask_ratio: float = 0.9, tau: float = 0.2):
         N, _, D = x.shape
         TP = self.temporal_segments
         VP = self.spatio_size
@@ -442,9 +443,14 @@ class SkTWithDecoder(nn.Module):
         x_motion = rearrange(x_motion, 'b n m (t s) v c -> (b n m) t v (s c)', s=s)
         
         # calculate the temporal attention score, based on motion intensity
-        motion_intensity = x_motion.pow(2)
+        # motion_intensity = x_motion.pow(2)
+        motion_intensity = x_motion.abs()
         temporal_motion_attn = reduce(motion_intensity, 'n t v c -> n t', 'mean')
-        temporal_motion_attn = temporal_motion_attn / (temporal_motion_attn.sum(dim=1, keepdim=True) + 1e-6)
+        # temporal_motion_attn = temporal_motion_attn / (temporal_motion_attn.sum(dim=1, keepdim=True) + 1e-6)
+        temporal_motion_attn = (temporal_motion_attn /
+                                (temporal_motion_attn.max(dim=1, keepdim=True).values
+                                + 1e-6))
+        temporal_motion_attn = F.softmax(temporal_motion_attn, dim=1)
         # Divide tubes according to temporal attention scores
         accum_temporal_attn = 0
         segment_states = torch.zeros_like(temporal_motion_attn, device=x.device)
@@ -470,10 +476,14 @@ class SkTWithDecoder(nn.Module):
         for i in range(TP):
             accum_spatial_attn += motion_intensity[:, i]
             spatial_motion_attn[torch.arange(N), masked_views_idxs] = accum_spatial_attn
-            masked_views_idxs = torch.where(segment_states[:, i].bool(), masked_views_idxs + 1, masked_views_idxs)
+            masked_views_idxs = torch.where(segment_states[:, i].bool(),
+                                            masked_views_idxs + 1,
+                                            masked_views_idxs)
             accum_spatial_attn = torch.where(segment_states[:, i, None].bool().repeat(1, 1, VP),
                                              0, accum_spatial_attn)
-        spatial_motion_attn = spatial_motion_attn / (spatial_motion_attn.max(dim=-1, keepdim=True).values + 1e-6)
+        spatial_motion_attn = (spatial_motion_attn /
+                               (spatial_motion_attn.max(dim=-1, keepdim=True).values
+                                + 1e-6))
         spatial_motion_prob = F.softmax(spatial_motion_attn, dim=-1)
         noise = torch.log(spatial_motion_prob)\
             - torch.log(-torch.log(torch.rand(N, masked_views, VP, device=x.device) + 1e-6) + 1e-6)
@@ -612,12 +622,15 @@ class SkTForClassification(nn.Module):
 
         self.cls_head = models.make(cls_head_spec,
                                     args={'emb_size': self.emb_size})
-        # if encoder_pretrain_weight:
-        #     # if have pretrain weight, only init cls head
-        #     # self.cls_head.apply(self._xavier_init_weights)
-        #     self.cls_head.apply(self._init_weights)
-        # else:
-        #     self.apply(self._init_weights)
+        if encoder_pretrain_weight:
+            # if have pretrain weight, only init cls head
+            # self.cls_head.apply(self._xavier_init_weights)
+            if encoder_freeze:
+                self.cls_head.apply(self._init_weights)
+            else:
+                self.cls_head.apply(self._xavier_init_weights)
+        else:
+            self.apply(self._xavier_init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
