@@ -25,16 +25,28 @@ from models import models
 import utils
 
 
-def ddp_setup(rank, world_size, port='12355'):
+def ddp_setup(local_rank, gpus, args):
     """
     Args:
         rank: Unique identifier of each process
         world_size: Total number of processes
     """
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = port
-    init_process_group(backend="nccl", rank=rank, world_size=world_size)
-    torch.cuda.set_device(rank)
+    global_rank = args.node_rank * gpus + local_rank
+    world_size = args.nodes * gpus
+    # os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_ADDR"] = args.addr
+    os.environ["MASTER_PORT"] = args.port
+    init_process_group(backend="nccl",
+                       rank=global_rank,
+                       world_size=world_size)
+    # init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    # 根据rank决定gpu id
+    # node_id = rank // args.nodes
+    # gpu_id = rank % args.nodes
+    # print(node_id, gpu_id)
+    # torch.cuda.set_device(rank)
+    torch.cuda.set_device(local_rank)
+    return global_rank, world_size
 
 
 def ddp_reduce(x):
@@ -269,24 +281,28 @@ def validate(val_loader, model, enable_amp=False):
     return val_loss
 
 
-def main(rank, world_size, config_, save_path, args):
+def main(local_rank, gpus, config_, save_path, args):
     global config, log
-    ddp_setup(rank, world_size, args.port)
+    # rank = args.node_rank * gpus + local_rank
+    # world_size = args.nodes * gpus
+    rank, world_size = ddp_setup(local_rank, gpus, args)
     config = config_
     if rank == 0:
         save_name = save_path.split('/')[-1]
         wandb.init(entity='ruizhuo_xu', project='Skeleton2vec', name=save_name)
         log = utils.set_save_path(save_path)
+        log(f'nodes: {args.nodes}, world_size: {world_size}')
         with open(os.path.join(save_path, 'config.yaml'), 'w') as f:
             yaml.dump(config, f, sort_keys=False)
     dist.barrier()
 
-    torch.cuda.set_device(rank)
+    # torch.cuda.set_device(rank)
     train_loader, val_loader = make_data_loaders()
     model, optimizer, epoch_start, lr_scheduler, loss_scaler = prepare_training()
     model = model.cuda()
     # model = DDP(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
-    model = DDP(model, device_ids=[rank], output_device=rank)
+    # model = DDP(model, device_ids=[rank], output_device=rank)
+    model = DDP(model, device_ids=[local_rank], output_device=local_rank)
     if args.compile:
         if rank == 0:
             log('Compiling model...')
@@ -377,7 +393,12 @@ if __name__ == "__main__":
     parser.add_argument('--name', default=None)
     parser.add_argument('--tag', default=None)
     parser.add_argument('--gpu', default='0')
+    # DDP args
+    parser.add_argument('--addr', default='localhost')
     parser.add_argument('--port', default='12355')
+    parser.add_argument('--nodes', type=int, default=1)
+    parser.add_argument('--node_rank', type=int, default=0)
+
     parser.add_argument('--enable_amp', action='store_true', default=False,
                         help='Enabling automatic mixed precision')
     parser.add_argument('--compile', action='store_true', default=False,
@@ -400,6 +421,9 @@ if __name__ == "__main__":
     if args.enable_amp:
         print('Enable amp')
 
-    world_size = torch.cuda.device_count()
-    mp.spawn(main, args=(world_size, config, save_path, args), nprocs=world_size)
+    gpus = torch.cuda.device_count()
+    # world_size = gpus * args.nodes
+    # world_size = torch.cuda.device_count()
+    # mp.spawn(main, args=(world_size, config, save_path, args), nprocs=world_size)
+    mp.spawn(main, args=(gpus, config, save_path, args), nprocs=gpus)
 

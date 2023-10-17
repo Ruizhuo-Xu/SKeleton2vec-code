@@ -16,7 +16,7 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 48
+  batch_size: 32
   num_workers: 8
 
 val_dataset:
@@ -36,7 +36,7 @@ val_dataset:
       ]
       split: xsub_val
   batch_size: 8
-  num_workers: 8
+  num_workers: 0
 
 model:
   name: Skeleton2Vec2
@@ -64,10 +64,11 @@ model:
       name: EMA
       args:
         # ema_decay: 0.9998
-        ema_decay: 0.9997
+        ema_decay: 0.9999
         # ema_end_decay: 0.99999
         ema_end_decay: 1.0
-        ema_anneal_end_step: 100000
+        # ema_anneal_end_step: 125600
+        ema_anneal_end_step: 83600
     average_top_k_layers: 8
     norm_target_per_layer: instance_norm
     normalize_targets: true
@@ -81,26 +82,26 @@ optimizer:
     betas: [0.9, 0.95]
     weight_decay: 5.e-2
 
-weight_decay_groups: false
+weight_decay_groups: true
 
 lr_scheduler:
   name: CosineDecayWithWarmup
   args:
     warmup_epochs: 20
-    max_epochs: 400
+    max_epochs: 800
     base_lr: 1.e-3
     min_lr: 5.e-4
     mode: step
 
 mask_ratio: 0.90
 tube_len: 5
-tau: 0.2
+tau: 0.15
 motion_loss_weight: 1.0
 random_tube: false
 num_masked_views: 1
 grad_accum_steps: 1
 # smooth_l1_beta: 1.
 clip_grad: 4.0
-epoch_max: 400
+epoch_max: 800
 epoch_val: 1000
-epoch_save: [100, 200, 300, 400]
+epoch_save: [100, 200, 300, 400, 500, 600, 700, 800]

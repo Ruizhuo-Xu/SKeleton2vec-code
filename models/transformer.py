@@ -619,6 +619,7 @@ class SkTForClassification(nn.Module):
             self.encoder.requires_grad_(False)
         self.encoder_freeze = encoder_freeze
         self.emb_size = self.encoder.encoder_emb_size
+        # self.norm = nn.LayerNorm(self.emb_size)
 
         self.cls_head = models.make(cls_head_spec,
                                     args={'emb_size': self.emb_size})
@@ -662,6 +663,9 @@ class SkTForClassification(nn.Module):
 
     def extract_feat(self, x):
         return self.encoder.forward_encoder(x)['last_hidden_state']
+        # feats = self.encoder.forward_encoder(x)['hidden_states']
+        # feat = sum(feats) / len(feats)
+        # return self.norm(feat)
 
     def forward_train(self, x):
         feat = self.extract_feat(x)

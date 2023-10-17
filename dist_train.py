@@ -3,8 +3,10 @@ import os
 import math
 import pdb
 import sys
+import random
 
 import yaml
+import numpy as np
 import torch
 import torch.nn as nn
 from tqdm import tqdm
@@ -23,6 +25,13 @@ from datasets import datasets
 from models import models
 import utils
 
+def setup_seed(seed):
+     torch.manual_seed(seed)
+     torch.cuda.manual_seed_all(seed)
+     np.random.seed(seed)
+     random.seed(seed)
+     os.environ['PYTHONHASHSEED'] = str(seed)  # 为了禁止hash随机化，使得实验可复现。
+     torch.backends.cudnn.deterministic = True
 
 def ddp_setup(rank, world_size, port='12355'):
     """
@@ -239,7 +248,7 @@ def main(rank, world_size, config_, save_path, args):
     if rank == 0:
         save_name = save_path.split('/')[-1]
         wandb.init(project='Skeleton2vec', name=save_name)
-        log = utils.set_save_path(save_path)
+        log = utils.set_save_path(save_path, remove=True)
         with open(os.path.join(save_path, 'config.yaml'), 'w') as f:
             yaml.dump(config, f, sort_keys=False)
     dist.barrier()
@@ -249,6 +258,7 @@ def main(rank, world_size, config_, save_path, args):
     model, optimizer, epoch_start, lr_scheduler, loss_scaler = prepare_training()
     model = model.cuda()
     # model = DDP(model, device_ids=[rank], output_device=rank)
+    model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
     model = DDP(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
     if args.compile:
         if rank == 0:
@@ -345,13 +355,22 @@ if __name__ == "__main__":
                         help='Enabling automatic mixed precision')
     parser.add_argument('--compile', action='store_true', default=False,
                         help='Enabling torch.Compile')
+    parser.add_argument('--drop_path', type=float, default=None)
+    parser.add_argument('--layer_decay', type=float, default=None)
     args = parser.parse_args()
+    
+    # setup_seed(42)
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
     with open(args.config, 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
         print('config loaded.')
+
+    if args.drop_path is not None:
+        config['model']['args']['drop_path_p'] = args.drop_path
+    if args.layer_decay is not None:
+        config['layer_decay'] = args.layer_decay
 
     save_name = args.name
     if save_name is None:

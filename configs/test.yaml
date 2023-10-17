@@ -16,4 +16,4 @@ test_dataset:
   batch_size: 16
   num_workers: 4
 
-ckp_path: save/ntu60_xsub_linear_probe_mask2_60/epoch-best.pth
+ckp_path: save/ntu60_xsub_fine_tune_800EP_0.75ld_0.3dp_3e-4lr_5wp_0.05wd_xavier/epoch-last.pth
