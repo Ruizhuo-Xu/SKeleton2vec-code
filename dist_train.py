@@ -258,7 +258,8 @@ def main(rank, world_size, config_, save_path, args):
     model, optimizer, epoch_start, lr_scheduler, loss_scaler = prepare_training()
     model = model.cuda()
     # model = DDP(model, device_ids=[rank], output_device=rank)
-    model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
+    if world_size > 1:
+        model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
     model = DDP(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
     if args.compile:
         if rank == 0:

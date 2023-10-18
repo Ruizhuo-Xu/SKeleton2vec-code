@@ -16,7 +16,7 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 32
+  batch_size: 64
   num_workers: 8
 
 val_dataset:
@@ -51,13 +51,13 @@ model:
         encoder_emb_size: 256
         decoder_emb_size: 256
         encoder_depth: 8
-        decoder_depth: 4
+        decoder_depth: 3
         num_heads: 8
         att_drop_p: 0.
         forward_drop_p: 0.
         drop_path_p: 0.
         layer_scale_init_value: 1.e-4
-        mask_strategy: 'tube'
+        mask_strategy: 'motion'
         using_feat_head: true
         using_motion_head: false
     ema_spec:
@@ -67,8 +67,8 @@ model:
         ema_decay: 0.9999
         # ema_end_decay: 0.99999
         ema_end_decay: 1.0
-        # ema_anneal_end_step: 125600
-        ema_anneal_end_step: 83600
+        ema_anneal_end_step: 62800
+        # ema_anneal_end_step: 83600
     average_top_k_layers: 8
     norm_target_per_layer: instance_norm
     normalize_targets: true
@@ -88,20 +88,20 @@ lr_scheduler:
   name: CosineDecayWithWarmup
   args:
     warmup_epochs: 20
-    max_epochs: 800
-    base_lr: 1.e-3
-    min_lr: 5.e-4
+    max_epochs: 400
+    base_lr: 2.e-3
+    min_lr: 1.e-4
     mode: step
 
 mask_ratio: 0.90
 tube_len: 5
-tau: 0.15
+tau: 0.20
 motion_loss_weight: 1.0
 random_tube: false
 num_masked_views: 1
 grad_accum_steps: 1
 # smooth_l1_beta: 1.
 clip_grad: 4.0
-epoch_max: 800
+epoch_max: 400
 epoch_val: 1000
 epoch_save: [100, 200, 300, 400, 500, 600, 700, 800]

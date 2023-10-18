@@ -58,12 +58,8 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    # encoder_pretrain_weight: /home/rz/nturgbd60_pretrain_skt2vec2_tube_800EP_256BS_WDGroups/epoch-200.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_96BSZ_1e-3lr_400EP_noMotion/epoch-400.pth
-    encoder_pretrain_weight: /home/rz/epoch-last.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_1e-3lr_400EP_noMotion/epoch-400.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_randomtube6/epoch-300.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube5/epoch-300.pth
+    encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_motion_aware_tau0.2/epoch-400.pth
+    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_src_Randomshift/epoch-100.pth
     encoder_freeze: true
     drop_path_p: 0.
   

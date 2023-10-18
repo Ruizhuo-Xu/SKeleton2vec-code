@@ -417,6 +417,11 @@ class SkTWithDecoder(nn.Module):
         ids_shuffle = ids_shuffle.repeat_interleave(tube_len, dim=1)
         ids_restore = ids_restore.repeat_interleave(tube_len, dim=1)
 
+        # shift tube
+        # shift = torch.randint(low=0, high=ids_shuffle.size(1), size=(1,)).item()
+        # ids_shuffle = torch.roll(ids_shuffle, shifts=shift, dims=1)
+        # ids_restore = torch.roll(ids_restore, shifts=shift, dims=1)
+
         # keep the first subset
         ids_keep = ids_shuffle[:, :, :len_VP_keep]
         x_masked = torch.gather(x.view(N, TP, VP, D), dim=2,
@@ -432,76 +437,41 @@ class SkTWithDecoder(nn.Module):
 
         return x_masked, mask, ids_restore, ids_keep
 
-    def motion_aware_tube_masking(self, x, x_motion,
+    def motion_aware_tube_masking(self, x, x_motion, tube_len,
                                   mask_ratio: float = 0.9, tau: float = 0.2):
-        N, _, D = x.shape
-        TP = self.temporal_segments
-        VP = self.spatio_size
+        pass
+        N, L, D = x.shape  # batch, length, dim
+        VP, TP = self.spatio_size, self.temporal_segments
         len_VP_keep = int(VP * (1 - mask_ratio))
-        x = rearrange(x, 'n (t v) d -> n t v d', t=TP, v=VP)
         s = self.temporal_segment_size
+
+        assert TP % tube_len == 0
+        TP_ = TP // tube_len
+
         x_motion = rearrange(x_motion, 'b n m (t s) v c -> (b n m) t v (s c)', s=s)
-        
-        # calculate the temporal attention score, based on motion intensity
-        # motion_intensity = x_motion.pow(2)
         motion_intensity = x_motion.abs()
-        temporal_motion_attn = reduce(motion_intensity, 'n t v c -> n t', 'mean')
-        # temporal_motion_attn = temporal_motion_attn / (temporal_motion_attn.sum(dim=1, keepdim=True) + 1e-6)
-        temporal_motion_attn = (temporal_motion_attn /
-                                (temporal_motion_attn.max(dim=1, keepdim=True).values
-                                + 1e-6))
-        temporal_motion_attn = F.softmax(temporal_motion_attn, dim=1)
-        # Divide tubes according to temporal attention scores
-        accum_temporal_attn = 0
-        segment_states = torch.zeros_like(temporal_motion_attn, device=x.device)
-        for i in range(TP):
-            accum_temporal_attn += temporal_motion_attn[:, i]
-            is_segment_end = (accum_temporal_attn > tau)
-            if i > 0:
-                segment_states[:, i-1] = is_segment_end
-                accum_temporal_attn = torch.where(is_segment_end, temporal_motion_attn[:, i], accum_temporal_attn)
-            else:
-                segment_states[:, i] = is_segment_end
-                accum_temporal_attn = torch.where(is_segment_end, 0, accum_temporal_attn)
-        # the final frame is always the end of segment
-        segment_states[:, -1] = 1
-        masked_views = segment_states.sum(dim=1).max()
-        masked_views = int(masked_views.item())
-
-        # Determine the joint to be masked according to the spatial attention score
-        spatial_motion_attn = torch.zeros((N, masked_views, VP), device=x.device)
-        masked_views_idxs = torch.zeros((N,), device=x.device).long()
-        accum_spatial_attn = 0
         motion_intensity = reduce(motion_intensity, 'n t v c -> n t v', 'mean')
-        for i in range(TP):
-            accum_spatial_attn += motion_intensity[:, i]
-            spatial_motion_attn[torch.arange(N), masked_views_idxs] = accum_spatial_attn
-            masked_views_idxs = torch.where(segment_states[:, i].bool(),
-                                            masked_views_idxs + 1,
-                                            masked_views_idxs)
-            accum_spatial_attn = torch.where(segment_states[:, i, None].bool().repeat(1, 1, VP),
-                                             0, accum_spatial_attn)
-        spatial_motion_attn = (spatial_motion_attn /
-                               (spatial_motion_attn.max(dim=-1, keepdim=True).values
-                                + 1e-6))
-        spatial_motion_prob = F.softmax(spatial_motion_attn, dim=-1)
-        noise = torch.log(spatial_motion_prob)\
-            - torch.log(-torch.log(torch.rand(N, masked_views, VP, device=x.device) + 1e-6) + 1e-6)
+        motion_intensity = motion_intensity.view(-1, TP_, tube_len, VP).mean(dim=2)
+        motion_intensity = motion_intensity / (motion_intensity.max(dim=1, keepdim=True).values + 1e-6)
 
-        segment_state_ = segment_states.cumsum(dim=1)
-        segment_state_[segment_states == 1] -= 1
+        # Divide the dimension of time into several tubes
+        noise = torch.rand(N, TP_, VP, device=x.device)  # noise in [0, 1]
+        noise = noise + tau * motion_intensity
 
-        # noise = torch.rand(N, masked_views, VP, device=x.device)
         # sort noise for each sample
         ids_shuffle = torch.argsort(
             noise, dim=-1
         )  # ascend: small is keep, large is remove
         ids_restore = torch.argsort(ids_shuffle, dim=-1)
 
-        ids_shuffle = torch.gather(ids_shuffle, dim=1,
-                                   index=segment_state_.unsqueeze(-1).repeat(1, 1, VP).long())
-        ids_restore = torch.gather(ids_restore, dim=1,
-                                   index=segment_state_.unsqueeze(-1).repeat(1, 1, VP).long())
+        # Fill the tubes to restore the original dimension of time
+        ids_shuffle = ids_shuffle.repeat_interleave(tube_len, dim=1)
+        ids_restore = ids_restore.repeat_interleave(tube_len, dim=1)
+
+        # shift tube
+        # shift = torch.randint(low=0, high=ids_shuffle.size(1), size=(1,)).item()
+        # ids_shuffle = torch.roll(ids_shuffle, shifts=shift, dims=1)
+        # ids_restore = torch.roll(ids_restore, shifts=shift, dims=1)
 
         # keep the first subset
         ids_keep = ids_shuffle[:, :, :len_VP_keep]
@@ -517,6 +487,90 @@ class SkTWithDecoder(nn.Module):
         mask = rearrange(mask, 'n t v -> n (t v)')
 
         return x_masked, mask, ids_restore, ids_keep
+
+        # N, _, D = x.shape
+        # TP = self.temporal_segments
+        # VP = self.spatio_size
+        # len_VP_keep = int(VP * (1 - mask_ratio))
+        # x = rearrange(x, 'n (t v) d -> n t v d', t=TP, v=VP)
+        # s = self.temporal_segment_size
+        # x_motion = rearrange(x_motion, 'b n m (t s) v c -> (b n m) t v (s c)', s=s)
+        
+        # # calculate the temporal attention score, based on motion intensity
+        # # motion_intensity = x_motion.pow(2)
+        # motion_intensity = x_motion.abs()
+        # temporal_motion_attn = reduce(motion_intensity, 'n t v c -> n t', 'mean')
+        # # temporal_motion_attn = temporal_motion_attn / (temporal_motion_attn.sum(dim=1, keepdim=True) + 1e-6)
+        # temporal_motion_attn = (temporal_motion_attn /
+        #                         (temporal_motion_attn.max(dim=1, keepdim=True).values
+        #                         + 1e-6))
+        # temporal_motion_attn = F.softmax(temporal_motion_attn, dim=1)
+        # # Divide tubes according to temporal attention scores
+        # accum_temporal_attn = 0
+        # segment_states = torch.zeros_like(temporal_motion_attn, device=x.device)
+        # for i in range(TP):
+        #     accum_temporal_attn += temporal_motion_attn[:, i]
+        #     is_segment_end = (accum_temporal_attn > tau)
+        #     if i > 0:
+        #         segment_states[:, i-1] = is_segment_end
+        #         accum_temporal_attn = torch.where(is_segment_end, temporal_motion_attn[:, i], accum_temporal_attn)
+        #     else:
+        #         segment_states[:, i] = is_segment_end
+        #         accum_temporal_attn = torch.where(is_segment_end, 0, accum_temporal_attn)
+        # # the final frame is always the end of segment
+        # segment_states[:, -1] = 1
+        # masked_views = segment_states.sum(dim=1).max()
+        # masked_views = int(masked_views.item())
+
+        # # Determine the joint to be masked according to the spatial attention score
+        # spatial_motion_attn = torch.zeros((N, masked_views, VP), device=x.device)
+        # masked_views_idxs = torch.zeros((N,), device=x.device).long()
+        # accum_spatial_attn = 0
+        # motion_intensity = reduce(motion_intensity, 'n t v c -> n t v', 'mean')
+        # for i in range(TP):
+        #     accum_spatial_attn += motion_intensity[:, i]
+        #     spatial_motion_attn[torch.arange(N), masked_views_idxs] = accum_spatial_attn
+        #     masked_views_idxs = torch.where(segment_states[:, i].bool(),
+        #                                     masked_views_idxs + 1,
+        #                                     masked_views_idxs)
+        #     accum_spatial_attn = torch.where(segment_states[:, i, None].bool().repeat(1, 1, VP),
+        #                                      0, accum_spatial_attn)
+        # spatial_motion_attn = (spatial_motion_attn /
+        #                        (spatial_motion_attn.max(dim=-1, keepdim=True).values
+        #                         + 1e-6))
+        # spatial_motion_prob = F.softmax(spatial_motion_attn, dim=-1)
+        # noise = torch.log(spatial_motion_prob)\
+        #     - torch.log(-torch.log(torch.rand(N, masked_views, VP, device=x.device) + 1e-6) + 1e-6)
+
+        # segment_state_ = segment_states.cumsum(dim=1)
+        # segment_state_[segment_states == 1] -= 1
+
+        # # noise = torch.rand(N, masked_views, VP, device=x.device)
+        # # sort noise for each sample
+        # ids_shuffle = torch.argsort(
+        #     noise, dim=-1
+        # )  # ascend: small is keep, large is remove
+        # ids_restore = torch.argsort(ids_shuffle, dim=-1)
+
+        # ids_shuffle = torch.gather(ids_shuffle, dim=1,
+        #                            index=segment_state_.unsqueeze(-1).repeat(1, 1, VP).long())
+        # ids_restore = torch.gather(ids_restore, dim=1,
+        #                            index=segment_state_.unsqueeze(-1).repeat(1, 1, VP).long())
+
+        # # keep the first subset
+        # ids_keep = ids_shuffle[:, :, :len_VP_keep]
+        # x_masked = torch.gather(x.view(N, TP, VP, D), dim=2,
+        #                         index=ids_keep.unsqueeze(-1).repeat(1, 1, 1, D))
+        # x_masked = rearrange(x_masked, 'n t v d -> n (t v) d')
+
+        # # generate the binary mask: 0 is keep, 1 is remove
+        # mask = torch.ones([N, TP, VP], device=x.device)
+        # mask[:, :, :len_VP_keep] = 0
+        # # unshuffle to get the binary mask
+        # mask = torch.gather(mask, dim=2, index=ids_restore)
+        # mask = rearrange(mask, 'n t v -> n (t v)')
+
+        # return x_masked, mask, ids_restore, ids_keep
     
     def forward_encoder(self, x, mask_ratio: float = 0.,
                         tube_len: int = 6,
@@ -529,7 +583,7 @@ class SkTWithDecoder(nn.Module):
             elif self.mask_strategy == 'tube':
                 x, mask, id_restore, _ = self.tube_masking(x, mask_ratio, tube_len)
             elif self.mask_strategy == 'motion':
-                x, mask, id_restore, _ = self.motion_aware_tube_masking(x, x_motion, mask_ratio, tau)
+                x, mask, id_restore, _ = self.motion_aware_tube_masking(x, x_motion, tube_len, mask_ratio, tau)
             else:
                 raise NotImplementedError
         else:

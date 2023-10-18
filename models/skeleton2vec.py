@@ -260,6 +260,13 @@ class Skeleton2Vec2(nn.Module):
         if self.auto_encoder.using_feat_head:
             with torch.no_grad():
                 self.ema.model.eval()
+
+                # shift = torch.randint(0, 15, size=(1,)).item()
+                # shifted_src = torch.zeros_like(src, device=src.device)
+                # T = src.shape[3]
+                # shifted_src[:, :, :, :T-shift, :, :] = src[:, :, :, shift:, :, :]
+                # shifted_src[:, :, :, T-shift:, :, :] = src[:, :, :, -1:, :, :]
+                # y = self.ema.model.forward_encoder(shifted_src, mask_ratio=0., output_hidden_states=True)['hidden_states']  # fetch the last transformer layers outputs
                 y = self.ema.model.forward_encoder(src, mask_ratio=0., output_hidden_states=True)['hidden_states']  # fetch the last transformer layers outputs
                 y = y[-self.average_top_k_layers:]  # take the last k transformer layers
 
