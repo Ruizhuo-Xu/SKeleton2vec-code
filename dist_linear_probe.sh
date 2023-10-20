@@ -6,4 +6,4 @@ export CUDA_VISIBLE_DEVICES=0,1
 
 python dist_train.py \
 --config configs/linear_probe.yaml \
---name ntu60_xsub --tag linear_probe_motion_aware_tau0.2 --port $MASTER_PORT --enable_amp
+--name ntu60_xsub --tag linear_probe_995EMA_all --port $MASTER_PORT --enable_amp

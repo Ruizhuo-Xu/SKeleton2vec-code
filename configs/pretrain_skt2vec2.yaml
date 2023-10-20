@@ -64,10 +64,11 @@ model:
       name: EMA
       args:
         # ema_decay: 0.9998
-        ema_decay: 0.9999
+        ema_decay: 0.990
         # ema_end_decay: 0.99999
         ema_end_decay: 1.0
-        ema_anneal_end_step: 62800
+        # ema_anneal_end_step: 62800
+        ema_anneal_end_step: 125600
         # ema_anneal_end_step: 83600
     average_top_k_layers: 8
     norm_target_per_layer: instance_norm
@@ -89,13 +90,14 @@ lr_scheduler:
   args:
     warmup_epochs: 20
     max_epochs: 400
-    base_lr: 2.e-3
+    base_lr: 1.e-3
     min_lr: 1.e-4
     mode: step
 
 mask_ratio: 0.90
 tube_len: 5
-tau: 0.20
+s_tau: 0.20
+t_tau: 0.15
 motion_loss_weight: 1.0
 random_tube: false
 num_masked_views: 1

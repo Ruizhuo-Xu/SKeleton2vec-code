@@ -438,8 +438,9 @@ class SkTWithDecoder(nn.Module):
         return x_masked, mask, ids_restore, ids_keep
 
     def motion_aware_tube_masking(self, x, x_motion, tube_len,
-                                  mask_ratio: float = 0.9, tau: float = 0.2):
-        pass
+                                  mask_ratio: float = 0.9, s_tau: float = 0.2,
+                                  t_tau: float = 0.2):
+        # pass
         N, L, D = x.shape  # batch, length, dim
         VP, TP = self.spatio_size, self.temporal_segments
         len_VP_keep = int(VP * (1 - mask_ratio))
@@ -456,7 +457,7 @@ class SkTWithDecoder(nn.Module):
 
         # Divide the dimension of time into several tubes
         noise = torch.rand(N, TP_, VP, device=x.device)  # noise in [0, 1]
-        noise = noise + tau * motion_intensity
+        noise = noise + s_tau * motion_intensity
 
         # sort noise for each sample
         ids_shuffle = torch.argsort(
@@ -510,7 +511,7 @@ class SkTWithDecoder(nn.Module):
         # segment_states = torch.zeros_like(temporal_motion_attn, device=x.device)
         # for i in range(TP):
         #     accum_temporal_attn += temporal_motion_attn[:, i]
-        #     is_segment_end = (accum_temporal_attn > tau)
+        #     is_segment_end = (accum_temporal_attn > t_tau)
         #     if i > 0:
         #         segment_states[:, i-1] = is_segment_end
         #         accum_temporal_attn = torch.where(is_segment_end, temporal_motion_attn[:, i], accum_temporal_attn)
@@ -538,9 +539,11 @@ class SkTWithDecoder(nn.Module):
         # spatial_motion_attn = (spatial_motion_attn /
         #                        (spatial_motion_attn.max(dim=-1, keepdim=True).values
         #                         + 1e-6))
-        # spatial_motion_prob = F.softmax(spatial_motion_attn, dim=-1)
-        # noise = torch.log(spatial_motion_prob)\
-        #     - torch.log(-torch.log(torch.rand(N, masked_views, VP, device=x.device) + 1e-6) + 1e-6)
+        # # spatial_motion_prob = F.softmax(spatial_motion_attn, dim=-1)
+        # # noise = torch.log(spatial_motion_prob)\
+        # #     - torch.log(-torch.log(torch.rand(N, masked_views, VP, device=x.device) + 1e-6) + 1e-6)
+        # noise = torch.rand(N, masked_views, VP, device=x.device)
+        # noise = noise + s_tau * spatial_motion_attn
 
         # segment_state_ = segment_states.cumsum(dim=1)
         # segment_state_[segment_states == 1] -= 1
@@ -575,7 +578,8 @@ class SkTWithDecoder(nn.Module):
     def forward_encoder(self, x, mask_ratio: float = 0.,
                         tube_len: int = 6,
                         x_motion: torch.Tensor = None,
-                        tau: float = 0.2, output_hidden_states=True):
+                        s_tau: float = 0.2, t_tau: float = 0.2,
+                        output_hidden_states=True):
         x = self.encoder_embedding(x, bool_masked_pos=None)
         if mask_ratio > 0.:
             if self.mask_strategy == 'random':
@@ -583,7 +587,7 @@ class SkTWithDecoder(nn.Module):
             elif self.mask_strategy == 'tube':
                 x, mask, id_restore, _ = self.tube_masking(x, mask_ratio, tube_len)
             elif self.mask_strategy == 'motion':
-                x, mask, id_restore, _ = self.motion_aware_tube_masking(x, x_motion, tube_len, mask_ratio, tau)
+                x, mask, id_restore, _ = self.motion_aware_tube_masking(x, x_motion, tube_len, mask_ratio, s_tau, t_tau)
             else:
                 raise NotImplementedError
         else:
@@ -641,8 +645,8 @@ class SkTWithDecoder(nn.Module):
         return res    
 
     def forward(self, x, mask_ratio: float = 0.8, tube_len: int = 6,
-                x_motion: torch.Tensor = None, tau: float = 0.2):
-        encoder_outputs = self.forward_encoder(x, mask_ratio, tube_len, x_motion, tau)
+                x_motion: torch.Tensor = None, s_tau: float = 0.2, t_tau: float = 0.2):
+        encoder_outputs = self.forward_encoder(x, mask_ratio, tube_len, x_motion, s_tau, t_tau)
         id_restore = encoder_outputs['id_restore']
         mask = encoder_outputs['mask']
         latent = encoder_outputs['last_hidden_state']
