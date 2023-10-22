@@ -2,7 +2,7 @@ train_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu60_3danno.pkl
+      anno_file: data/nturgbd/ntu120_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: RandomRot, args: {theta: 0.3}},
@@ -14,9 +14,9 @@ train_dataset:
         {name: Collect, args: {keys: [keypoint, motion, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, motion, label]}},
       ]
-      split: xview_train
+      split: xset_train
       # first_k: 100
-  batch_size: 64
+  batch_size: 32
   num_workers: 8
 
 val_dataset:
@@ -51,7 +51,7 @@ model:
         encoder_emb_size: 256
         decoder_emb_size: 256
         encoder_depth: 8
-        decoder_depth: 3
+        decoder_depth: 5
         num_heads: 8
         att_drop_p: 0.
         forward_drop_p: 0.
@@ -70,7 +70,7 @@ model:
         # ema_anneal_end_step: 62800
         # ema_anneal_end_step: 125600
         # ema_anneal_end_step: 251200
-        ema_anneal_end_step: 236000
+        ema_anneal_end_step: 340800
         # ema_anneal_end_step: 83600
     average_top_k_layers: 8
     norm_target_per_layer: instance_norm

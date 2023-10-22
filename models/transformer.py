@@ -669,12 +669,14 @@ class SkTForClassification(nn.Module):
             sv_file = torch.load(encoder_pretrain_weight)
             sv_file['model']['args']['model_spec']['args']['drop_path_p'] = drop_path_p
             loaded_model = models.make(sv_file['model'], load_sd=True)
-            self.encoder = loaded_model.auto_encoder
-            # self.encoder = loaded_model.ema.model
+            # self.encoder = loaded_model.auto_encoder
+            self.encoder = loaded_model.ema.model
         else:
             self.encoder = models.make(encoder_spec)
         if encoder_freeze:
             self.encoder.requires_grad_(False)
+        else:
+            self.encoder.requires_grad_(True)
         self.encoder_freeze = encoder_freeze
         self.emb_size = self.encoder.encoder_emb_size
         # self.norm = nn.LayerNorm(self.emb_size)

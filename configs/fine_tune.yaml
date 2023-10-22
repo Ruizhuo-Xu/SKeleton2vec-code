@@ -61,7 +61,7 @@ model:
         num_joints: 25
         drop_p: 0.3
     # encoder_pretrain_weight: /home/rz/nturgbd60_pretrain_skt2vec2_tube_800EP_256BS_WDGroups/epoch-last.pth
-    encoder_pretrain_weight: /home/rz/epoch-last.pth
+    encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema9999_800EP/epoch-600.pth
     # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_randomtube6/epoch-300.pth
     # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube5/epoch-300.pth
     encoder_freeze: false
@@ -85,7 +85,7 @@ lr_scheduler:
     mode: step
 
 label_smoothing: 0.1
-layer_decay: 0.75
+layer_decay: 0.80
 epoch_val: 1
 epoch_save: 200
 mode: fine_tune
