@@ -16,4 +16,5 @@ test_dataset:
   batch_size: 16
   num_workers: 4
 
-ckp_path: save/ntu60_xsub_fine_tune_800EP_1e-5minLR_3e-4baseLR_0.1LS_0.8LD_0.3dr_0.3DP_/epoch-last.pth
+# ckp_path: save/ntu60_xview_fine_tune_800EP_1e-5minLR_3e-4baseLR_0.1LS_0.8LD_1.3dr_0.3DP/epoch-best.pth
+ckp_path: save/ntu60_xview_fine_tune_800EP_1e-5minLR_3e-4baseLR_0.1LS_0.8LD_0.3dr_0.3DP/epoch-best.pth

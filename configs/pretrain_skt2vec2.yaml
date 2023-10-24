@@ -2,7 +2,7 @@ train_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu60_3danno.pkl
+      anno_file: data/nturgbd/ntu120_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: RandomRot, args: {theta: 0.3}},

@@ -4,7 +4,7 @@ test_dataset:
     args:
       anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
-        {name: PreNormalize3D, args: {align_spine: true}},
+        {name: PreNormalize3D, args: {align_spine: false}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         {name: UniformSampleDecode, args: {clip_len: 90, num_clips: 10}},
         # {name: RandomResizedCrop, args: {p_interval: [0.95, 0.95], clip_len: 120}},
@@ -12,8 +12,9 @@ test_dataset:
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
       ]
-      split: xview_val
+      split: xsub_val
   batch_size: 16
   num_workers: 4
 
-ckp_path: save/ntu60_xsub_fine_tune_800EP_1e-5minLR_3e-4baseLR_0.1LS_0.8LD_0.3dr_0.3DP_/epoch-last.pth
+# ckp_path: save/ntu60_xsub_fine_tune_800EP_1e-5minLR_3e-4baseLR_0.1LS_0.8LD_0.3dr_0.3DP_new/epoch-last.pth
+ckp_path: save/ntu60_xsub_linear_probe/epoch-best.pth

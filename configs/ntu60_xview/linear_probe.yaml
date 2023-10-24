@@ -58,16 +58,7 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_t-tau0.15_s-tau0.2/epoch-100.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_5e-4baseLR_1e-5minLR_tube5_tau0.2/epoch-last.pth
     encoder_pretrain_weight: /home/rz/epoch-800.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_tau0.2_ema999/epoch-300.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_tau0.2_ema999_125K/epoch-100.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema9999_800EP/epoch-600.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_tau0.2_ema999_400end_800EP/epoch-last.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_tau0.2_ema995_125K/epoch-200.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_tau0.2_ema999_200EP_9999/epoch-200.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_src_Randomshift/epoch-100.pth
     encoder_freeze: true
     drop_path_p: 0.
   

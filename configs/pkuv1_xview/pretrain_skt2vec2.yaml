@@ -2,9 +2,9 @@ train_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu120_3danno.pkl
+      anno_file: data/pku/pkuv1_3danno.pkl
       pipelines: [
-        {name: PreNormalize3D, args: {}},
+        {name: PreNormalize3D, args: {align_spine: false}},
         {name: RandomRot, args: {theta: 0.3}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
@@ -14,7 +14,7 @@ train_dataset:
         {name: Collect, args: {keys: [keypoint, motion, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, motion, label]}},
       ]
-      split: xset_train
+      split: xview_train
       # first_k: 100
   batch_size: 64
   num_workers: 8
@@ -23,9 +23,9 @@ val_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu60_3danno.pkl
+      anno_file: data/pku/pkuv1_3danno.pkl
       pipelines: [
-        {name: PreNormalize3D, args: {}},
+        {name: PreNormalize3D, args: {align_spine: false}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
@@ -70,7 +70,7 @@ model:
         # ema_anneal_end_step: 62800
         # ema_anneal_end_step: 125600
         # ema_anneal_end_step: 251200
-        ema_anneal_end_step: 340800
+        ema_anneal_end_step: 28800
         # ema_anneal_end_step: 83600
     average_top_k_layers: 8
     norm_target_per_layer: instance_norm

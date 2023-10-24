@@ -16,7 +16,7 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 32
+  batch_size: 64
   num_workers: 8
 
 val_dataset:
@@ -51,7 +51,7 @@ model:
         encoder_emb_size: 256
         decoder_emb_size: 256
         encoder_depth: 8
-        decoder_depth: 5
+        decoder_depth: 3
         num_heads: 8
         att_drop_p: 0.
         forward_drop_p: 0.
