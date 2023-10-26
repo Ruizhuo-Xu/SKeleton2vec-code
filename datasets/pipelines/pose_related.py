@@ -74,6 +74,11 @@ class PreNormalize3D:
                 main_body_center = skeleton[0, 0, -1].copy()
             mask = ((skeleton != 0).sum(-1) > 0)[..., None]
             skeleton = (skeleton - main_body_center) * mask
+        else:
+            if skeleton.shape[2] == 25:
+                main_body_center = skeleton[0, 0, 1].copy()
+            else:
+                main_body_center = skeleton[0, 0, -1].copy()
 
         if self.align_spine:
             joint_bottom = skeleton[0, 0, self.zaxis[0]]

@@ -4,7 +4,7 @@ train_dataset:
     args:
       anno_file: data/nturgbd/ntu120_3danno.pkl
       pipelines: [
-        {name: PreNormalize3D, args: {}},
+        {name: PreNormalize3D, args: {align_spine: false}},
         {name: RandomRot, args: {theta: 0.3}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},

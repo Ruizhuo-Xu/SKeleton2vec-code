@@ -2,7 +2,7 @@ train_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/pku/pkuv1_3danno.pkl
+      anno_file: data/pku/pkuv2_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
         {name: RandomRot, args: {theta: 0.3}},
@@ -14,7 +14,7 @@ train_dataset:
         {name: Collect, args: {keys: [keypoint, motion, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, motion, label]}},
       ]
-      split: xview_train
+      split: xsub_train
       # first_k: 100
   batch_size: 64
   num_workers: 8
@@ -23,7 +23,7 @@ val_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/pku/pkuv1_3danno.pkl
+      anno_file: data/pku/pkuv2_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
@@ -34,7 +34,7 @@ val_dataset:
         {name: Collect, args: {keys: [keypoint, motion, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, motion, label]}},
       ]
-      split: xview_val
+      split: xsub_test
   batch_size: 8
   num_workers: 0
 
@@ -64,13 +64,13 @@ model:
       name: EMA
       args:
         # ema_decay: 0.9998
-        ema_decay: 0.9999
+        ema_decay: 0.999
         # ema_end_decay: 0.99999
         ema_end_decay: 1.0
         # ema_anneal_end_step: 62800
         # ema_anneal_end_step: 125600
         # ema_anneal_end_step: 251200
-        ema_anneal_end_step: 28800
+        ema_anneal_end_step: 33600
         # ema_anneal_end_step: 83600
     average_top_k_layers: 8
     norm_target_per_layer: instance_norm

@@ -2,7 +2,7 @@ train_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu120_3danno.pkl
+      anno_file: data/pku/pkuv1_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
         {name: RandomRot, args: {theta: 0.3}},
@@ -15,14 +15,14 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 128
+  batch_size: 64
   num_workers: 4
 
 val_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu120_3danno.pkl
+      anno_file: data/pku/pkuv1_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
@@ -51,23 +51,16 @@ model:
         num_heads: 8
         att_drop_p: 0.
         forward_drop_p: 0.
-        drop_path_p: 0.0
+        drop_path_p: 0.
     cls_head_spec:
       name: ClassificationHeadLight
       args:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_t-tau0.15_s-tau0.2/epoch-100.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_5e-4baseLR_1e-5minLR_tube5_tau0.2/epoch-last.pth
-    encoder_pretrain_weight: save/nturgbd120_xset_pretrain_skt2vec2_64BSZ_5D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema9999_800EP_/epoch-200.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_tau0.2_ema999/epoch-300.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_tau0.2_ema999_125K/epoch-100.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema9999_800EP/epoch-600.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_tau0.2_ema999_400end_800EP/epoch-last.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_tau0.2_ema995_125K/epoch-200.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_tau0.2_ema999_200EP_9999/epoch-200.pth
-    # encoder_pretrain_weight: save/nturgbd60_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-4minLR_tube5_src_Randomshift/epoch-100.pth
+    # encoder_pretrain_weight: save/pkuv1_xsub_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema999_800EP/epoch-800.pth
+    encoder_pretrain_weight: save/pkuv1_xsub_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema9999_800EP_/epoch-800.pth
+    
     encoder_freeze: true
     drop_path_p: 0.
   
@@ -86,7 +79,7 @@ lr_scheduler:
   args:
     warmup_epochs: 0
     max_epochs: 100
-    base_lr: 0.1
+    base_lr: 0.01
     min_lr: 0.
     mode: step
 # lr_scheduler:

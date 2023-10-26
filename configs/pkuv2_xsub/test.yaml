@@ -1,0 +1,19 @@
+test_dataset:
+  dataset:
+    name: PoseDataset
+    args:
+      anno_file: data/pku/pkuv2_3danno.pkl
+      pipelines: [
+        {name: PreNormalize3D, args: {align_spine: false}},
+        {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
+        {name: UniformSampleDecode, args: {clip_len: 90, num_clips: 10}},
+        # {name: RandomResizedCrop, args: {p_interval: [0.95, 0.95], clip_len: 120}},
+        {name: FormatGCNInput, args: {}},
+        {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
+        {name: ToTensor, args: {keys: [keypoint, label]}},
+      ]
+      split: xsub_test
+  batch_size: 16
+  num_workers: 4
+
+ckp_path: save/pkuv2_xsub_linear_probe/epoch-best.pth

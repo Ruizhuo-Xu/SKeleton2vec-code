@@ -671,6 +671,9 @@ class SkTForClassification(nn.Module):
             loaded_model = models.make(sv_file['model'], load_sd=True)
             # self.encoder = loaded_model.auto_encoder
             self.encoder = loaded_model.ema.model
+
+            # loaded_model = models.make(encoder_spec)
+            # self.encoder = loaded_model.load_from_checkpoint(encoder_pretrain_weight).model.auto_encoder
         else:
             self.encoder = models.make(encoder_spec)
         if encoder_freeze:

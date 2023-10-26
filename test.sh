@@ -5,5 +5,5 @@ export TORCH_DISTRIBUTED_DEBUG=DETAIL
 export CUDA_VISIBLE_DEVICES=0,1
 
 python test.py \
---config configs/ntu60_xsub/test.yaml \
+--config configs/pkuv2_xsub/test.yaml \
 --port $MASTER_PORT --enable_amp
