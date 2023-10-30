@@ -1,5 +1,6 @@
 import pickle
 import copy
+import random
 
 import torch
 from torch.utils.data import Dataset
@@ -17,7 +18,8 @@ class PoseDataset(Dataset):
                  pipelines,
                  split=None,
                  test_mode=False,
-                 first_k=None):
+                 first_k=None,
+                 data_ratio=None):
         """
         Args:
             data_path (string): Path to the pose data.
@@ -35,6 +37,10 @@ class PoseDataset(Dataset):
         self.video_infos = self.load_annotations()
         if first_k:
             self.video_infos = self.video_infos[:first_k]
+        if data_ratio is not None:
+            assert data_ratio > 0 and data_ratio <= 1
+            data_len = int(len(self.video_infos) * data_ratio)
+            self.video_infos = random.sample(self.video_infos, data_len)
     
     def load_pkl_annotations(self):
         with open(self.anno_file, 'rb') as f:

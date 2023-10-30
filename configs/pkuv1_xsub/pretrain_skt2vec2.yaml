@@ -97,8 +97,8 @@ lr_scheduler:
     mode: step
 
 mask_ratio: 0.90
-tube_len: 10
-s_tau: 0.20
+tube_len: 5
+s_tau: 0.40
 t_tau: 0.15
 motion_loss_weight: 1.0
 random_tube: false

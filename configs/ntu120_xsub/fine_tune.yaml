@@ -2,7 +2,7 @@ train_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu60_3danno.pkl
+      anno_file: data/nturgbd/ntu120_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
         {name: RandomRot, args: {theta: 0.3}},
@@ -22,7 +22,7 @@ val_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu60_3danno.pkl
+      anno_file: data/nturgbd/ntu120_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
@@ -53,27 +53,18 @@ model:
         forward_drop_p: 0.
         drop_path_p: 0.
     cls_head_spec:
-      name: ClassificationHeadAttn
+      name: ClassificationHeadLarge
       args:
-        n_classes: 60
+        n_classes: 120
         hidden_dim: 2048
         num_persons: 2
         num_joints: 25
         drop_p: 0.3
-    # cls_head_spec:
-    #   name: ClassificationHeadLarge
-    #   args:
-    #     n_classes: 60
-    #     hidden_dim: 2048
-    #     num_persons: 2
-    #     num_joints: 25
-    #     drop_p: 0.3
-    encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-800.pth
+    encoder_pretrain_weight: checkpoints/ntu120_xsub/epoch-800.pth
     encoder_freeze: false
     drop_path_p: 0.30
     using_ema_model: true
     init_scale: 1.0
-    reinit_last_norm: false
 
 optimizer:
   name: adamw

@@ -118,17 +118,25 @@ class RandomResizedCrop:
 
     def _get_clips(self, full_kp):
         M, T, V, C = full_kp.shape
-        valid_size = T
         begin = 0
+        end = T
+        valid_size = end - begin
         clips = []
         for clip_idx in range(self.num_clips):
-            p = np.random.rand(1) * (self.p_interval[1] - self.p_interval[0]) + self.p_interval[0]
-            # constraint cropped_length lower bound as 64
-            cropped_length = np.minimum(np.maximum(int(np.floor(valid_size*p)), 64), valid_size)
-            bias = np.random.randint(0, valid_size - cropped_length + 1)
-            clip = full_kp[:, begin+bias:begin+bias+cropped_length, :, :].copy()
-            if clip.shape[1] == 0:
-                print(cropped_length, bias, valid_size)
+            # crop
+            if len(self.p_interval) == 1:
+                p = self.p_interval[0]
+                bias = int((1 - p) * valid_size / 2)
+                clip = full_kp[:, begin+bias:end-bias, :, :]  # center crop
+                cropped_length = clip.shape[1]
+            else:
+                p = np.random.rand(1) * (self.p_interval[1] - self.p_interval[0]) + self.p_interval[0]
+                # constraint cropped_length lower bound as 64
+                cropped_length = np.minimum(np.maximum(int(np.floor(valid_size*p)), 64), valid_size)
+                bias = np.random.randint(0, valid_size - cropped_length + 1)
+                clip = full_kp[:, begin+bias:begin+bias+cropped_length, :, :].copy()
+                if clip.shape[1] == 0:
+                    print(cropped_length, bias, valid_size)
 
             # resize
             clip = torch.tensor(clip, dtype=torch.float)

@@ -5,7 +5,7 @@ train_dataset:
       anno_file: data/pku/pkuv1_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
-        {name: RandomRot, args: {theta: 0.3}},
+        {name: RandomRot, args: {theta: 0.2}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
         # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
@@ -59,7 +59,7 @@ model:
         num_persons: 2
         drop_p: 0.
     # encoder_pretrain_weight: save/pkuv1_xsub_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema999_800EP/epoch-800.pth
-    encoder_pretrain_weight: save/pkuv1_xsub_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema9999_800EP_/epoch-800.pth
+    encoder_pretrain_weight: save/pkuv1_xsub_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.3_ema999_800EP/epoch-800.pth
     
     encoder_freeze: true
     drop_path_p: 0.

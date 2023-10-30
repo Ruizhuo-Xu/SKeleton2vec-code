@@ -256,6 +256,55 @@ class ClassificationHeadLarge(nn.Sequential):
         )
 
 
+@models.register('ClassificationHeadAttn')
+class ClassificationHeadAttn(nn.Module):
+    def __init__(self, emb_size: int = 256,
+                 n_classes: int = 120,
+                 hidden_dim: int = 2048,
+                 num_persons: int = 2,
+                 num_joints: int = 25,
+                 drop_p: float = 0.):
+        super().__init__()
+        self.emb_size = emb_size
+        self.n_classes = n_classes
+        self.hidden_dim = hidden_dim
+        self.num_persons = num_persons
+        self.num_joints = num_joints
+        self.drop_p = drop_p
+        self.attn = nn.Linear(emb_size, 1)
+        # self.attn_spatial = nn.Linear(emb_size, 1)
+        self.fc1 = nn.Linear(emb_size*num_joints, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, n_classes)
+        self.drop = nn.Dropout(drop_p)
+        self.relu = nn.ReLU(inplace=True)
+        self.bn = nn.BatchNorm1d(hidden_dim)
+    
+    def forward(self, x):
+        attn_score = self.attn(x)  # (b, n, 1)
+        attn_score = rearrange(attn_score, '(b m) (t v) c -> b m t v c',
+                               m=self.num_persons, v=self.num_joints)
+        attn_score = F.softmax(attn_score, dim=2)
+        x = rearrange(x, '(b m) (t v) c -> b m t v c',
+                      m=self.num_persons, v=self.num_joints)
+        x = x * attn_score
+        x = reduce(x, 'b m t v c -> b m v c', reduction='sum')
+        x = rearrange(x, 'b m v c -> b m (v c)')
+        x = reduce(x, 'b m c -> b c', reduction='mean')
+        x = self.drop(x)
+        x = self.fc1(x)
+        x = self.bn(x)
+        x = self.relu(x)
+        # x = self.drop(x)
+        x = self.fc2(x)
+        return x
+
+
+
+
+        
+        
+                 
+                 
 @models.register('SkT')
 class SkT(nn.Module):
     def __init__(self,     
@@ -663,14 +712,23 @@ class SkTForClassification(nn.Module):
                  encoder_pretrain_weight: str = None,
                  encoder_freeze: bool = False,
                  drop_path_p: float = 0.0,
+                 using_ema_model: bool = True,
+                 init_scale: float = 0.001,
+                 reinit_last_norm: bool = False,
                  ):
         super().__init__()
+        self.init_scale = init_scale
+        self.reinit_last_norm = reinit_last_norm
         if encoder_pretrain_weight:
             sv_file = torch.load(encoder_pretrain_weight)
             sv_file['model']['args']['model_spec']['args']['drop_path_p'] = drop_path_p
             loaded_model = models.make(sv_file['model'], load_sd=True)
-            # self.encoder = loaded_model.auto_encoder
-            self.encoder = loaded_model.ema.model
+            if using_ema_model:
+                self.encoder = loaded_model.ema.model
+            else:
+                self.encoder = loaded_model.auto_encoder
+            if reinit_last_norm:
+                self.encoder.encoder_norm = nn.LayerNorm(self.encoder.encoder_emb_size)
 
             # loaded_model = models.make(encoder_spec)
             # self.encoder = loaded_model.load_from_checkpoint(encoder_pretrain_weight).model.auto_encoder
@@ -692,7 +750,7 @@ class SkTForClassification(nn.Module):
             if encoder_freeze:
                 self.cls_head.apply(self._init_weights)
             else:
-                self.cls_head.apply(self._xavier_init_weights)
+                self.cls_head.apply(self._finetune_init_weights)
         else:
             self.apply(self._xavier_init_weights)
 
@@ -709,12 +767,15 @@ class SkTForClassification(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-    def _xavier_init_weights(self, m):
+    def _finetune_init_weights(self, m):
         if isinstance(m, nn.Linear):
             # we use xavier_uniform following official JAX ViT:
-            torch.nn.init.xavier_uniform_(m.weight)
+            trunc_normal_(m.weight, std=.02)
+            m.weight.data.mul_(self.init_scale)
+            # torch.nn.init.xavier_uniform_(m.weight)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
+                m.bias.data.mul_(self.init_scale)
         elif isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)

@@ -17,6 +17,7 @@ import torch.multiprocessing as mp
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
+from torch.optim.swa_utils import AveragedModel, SWALR
 import wandb
 from timm.loss import LabelSmoothingCrossEntropy
 import timm.optim.optim_factory as optim_factory
@@ -143,7 +144,8 @@ def prepare_training():
 
 def train(train_loader, model, optimizer,
           loss_scaler, enabble_amp=False,
-          epoch=None, lr_scheduler=None):
+          epoch=None, lr_scheduler=None,
+          is_swa_start=False):
     train_mode = config.get('mode')
     if train_mode == 'linear_probe':
         model.train()
@@ -166,8 +168,9 @@ def train(train_loader, model, optimizer,
     grad_norm_rec = []
 
     with tqdm(train_loader,leave=False, desc='train', ascii=True) as t:
-        for iter_step, batch in enumerate(t, 1):
-            if isinstance(lr_scheduler, utils.CosineDecayWithWarmup) and lr_scheduler.mode == 'step':
+        for iter_step, batch in enumerate(t):
+            if (isinstance(lr_scheduler, utils.CosineDecayWithWarmup)
+                and lr_scheduler.mode == 'step' and (not is_swa_start)):
                 lr_scheduler.step(iter_step / len(train_loader) + epoch)
             for k, v in batch.items():
                 batch[k] = v.cuda()
@@ -193,11 +196,9 @@ def train(train_loader, model, optimizer,
             # loss.backward()
             # optimizer.step()
 
-            current_lr_0 = optimizer.param_groups[0]['lr']
-            current_lr_1 = optimizer.param_groups[1]['lr']
+            current_lr = optimizer.param_groups[0]['lr']
             tqdm.set_postfix(t, {'loss': train_loss.item(),
-                                 'lr_0': current_lr_0,
-                                 'lr_1': current_lr_1,
+                                 'lr': current_lr,
                                  'train_acc': train_acc.item(),
                                  'grad norm': grad_norm.item()})
 
@@ -244,6 +245,65 @@ def validate(val_loader, model, enable_amp=False):
     return val_loss, val_acc
         
 
+@torch.no_grad()
+def update_bn(loader, model):
+    r"""Updates BatchNorm running_mean, running_var buffers in the model.
+
+    It performs one pass over data in `loader` to estimate the activation
+    statistics for BatchNorm layers in the model.
+    Args:
+        loader (torch.utils.data.DataLoader): dataset loader to compute the
+            activation statistics on. Each data batch should be either a
+            tensor, or a list/tuple whose first element is a tensor
+            containing data.
+        model (torch.nn.Module): model for which we seek to update BatchNorm
+            statistics.
+        device (torch.device, optional): If set, data will be transferred to
+            :attr:`device` before being passed into :attr:`model`.
+
+    Example:
+        >>> # xdoctest: +SKIP("Undefined variables")
+        >>> loader, model = ...
+        >>> torch.optim.swa_utils.update_bn(loader, model)
+
+    .. note::
+        The `update_bn` utility assumes that each data batch in :attr:`loader`
+        is either a tensor or a list or tuple of tensors; in the latter case it
+        is assumed that :meth:`model.forward()` should be called on the first
+        element of the list or tuple corresponding to the data batch.
+    """
+    momenta = {}
+    for module in model.modules():
+        if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
+            module.running_mean = torch.zeros_like(module.running_mean)
+            module.running_var = torch.ones_like(module.running_var)
+            momenta[module] = module.momentum
+
+    if not momenta:
+        return
+
+    was_training = model.training
+    model.train()
+    for module in momenta.keys():
+        module.momentum = None
+        module.num_batches_tracked *= 0
+
+    for input in loader:
+        for k, v in input.items():
+            input[k] = v.cuda()
+        inp = input['keypoint']
+        # if isinstance(input, (list, tuple)):
+        #     input = input[0]
+        # if device is not None:
+        #     input = input.to(device)
+
+        model(inp)
+
+    for bn_module in momenta.keys():
+        bn_module.momentum = momenta[bn_module]
+    model.train(was_training)
+
+
 def main(rank, world_size, config_, save_path, args):
     global config, log
     ddp_setup(rank, world_size, args.port)
@@ -260,10 +320,18 @@ def main(rank, world_size, config_, save_path, args):
     train_loader, val_loader = make_data_loaders()
     model, optimizer, epoch_start, lr_scheduler, loss_scaler = prepare_training()
     model = model.cuda()
-    # model = DDP(model, device_ids=[rank], output_device=rank)
     if world_size > 1:
         model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
+
     model = DDP(model, device_ids=[rank], output_device=rank, find_unused_parameters=True)
+
+    # swa
+    swa_start = config.get('swa_start', 0)
+    if swa_start > 0:
+        swa_model = AveragedModel(model)
+        swa_lr = config.get('swa_lr', 1.e-4)
+        swa_lr_scheduler = SWALR(optimizer, swa_lr=swa_lr)
+
     if args.compile:
         if rank == 0:
             log('Compiling model...')
@@ -276,6 +344,7 @@ def main(rank, world_size, config_, save_path, args):
 
     timer = utils.Timer()
 
+    is_swa_start = False
     for epoch in range(epoch_start, epoch_max + 1):
         t_epoch_start = timer.t()
         log_info = ['epoch {}/{}'.format(epoch, epoch_max)]
@@ -283,12 +352,18 @@ def main(rank, world_size, config_, save_path, args):
         train_loss, train_acc = train(
             train_loader, model, optimizer,
             loss_scaler, args.enable_amp,
-            epoch - 1, lr_scheduler)
-        current_lr = optimizer.param_groups[0]['lr']
-        if isinstance(lr_scheduler, MultiStepLR):
+            epoch - 1, lr_scheduler, is_swa_start)
+        is_swa_start = (epoch > swa_start)
+        if is_swa_start:
+            swa_lr_scheduler.step()
+            # if rank == 0:
+            swa_model.update_parameters(model)
+            torch.cuda.synchronize()
+        elif isinstance(lr_scheduler, MultiStepLR):
             lr_scheduler.step()
         elif isinstance(lr_scheduler, utils.CosineDecayWithWarmup) and lr_scheduler.mode == 'epoch':
             lr_scheduler.step()
+        current_lr = optimizer.param_groups[0]['lr']
         v = ddp_reduce(train_loss.v)
         n = ddp_reduce(train_loss.n)
         correct_num = ddp_reduce(train_acc.correct_num)
@@ -299,6 +374,7 @@ def main(rank, world_size, config_, save_path, args):
             train_acc = (train_acc.correct_num / train_acc.total_num)
             log_info.append(f'train: loss={train_loss:.4f}')
             log_info.append(f'train: acc={train_acc:.4f}')
+            log_info.append(f'train: lr={current_lr:.6f}')
             wandb.log({'train/loss': train_loss, 'train/acc': train_acc}, epoch)
             wandb.log({'train/lr': current_lr}, epoch)
 
@@ -344,6 +420,16 @@ def main(rank, world_size, config_, save_path, args):
         if rank == 0:
             log_info.append('{} {}/{}'.format(t_epoch, t_elapsed, t_all))
             log(', '.join(log_info))
+    # if rank == 0:
+    update_bn(train_loader, swa_model)
+    model_spec = config['model']
+    model_spec['sd'] = swa_model.module.state_dict()
+    sv_file = {
+        'model': model_spec,
+    }
+    if rank == 0:
+        torch.save(sv_file, os.path.join(save_path, 'epoch-last-swa.pth'))
+    torch.cuda.synchronize()
     destroy_process_group()
 
 

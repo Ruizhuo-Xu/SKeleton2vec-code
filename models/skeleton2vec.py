@@ -272,20 +272,20 @@ class Skeleton2Vec2(nn.Module):
                 y = y[-self.average_top_k_layers:]  # take the last k transformer layers
 
                 if self.norm_target_per_layer == 'layer_norm':
-                    # y = [F.layer_norm(tl.float(), tl.shape[-1:]) for tl in y]
-                    y = [F.layer_norm(tl, tl.shape[-1:]) for tl in y]
+                    y = [F.layer_norm(tl.float(), tl.shape[-1:]) for tl in y]
+                    # y = [F.layer_norm(tl, tl.shape[-1:]) for tl in y]
                     y = sum(y) / len(y)
                 elif self.norm_target_per_layer == 'instance_norm':
                     y = [rearrange(tl, 'b n c -> b c n') for tl in y]
-                    # y = [F.instance_norm(tl.float()) for tl in y]
-                    y = [F.instance_norm(tl) for tl in y]
+                    y = [F.instance_norm(tl.float()) for tl in y]
+                    # y = [F.instance_norm(tl) for tl in y]
                     y = [rearrange(tl, 'b c n -> b n c') for tl in y]
                     y = sum(y) / len(y)
                 else:
                     raise NotImplementedError
                 if self.normalize_targets:
-                    # y = F.layer_norm(y.float(), y.shape[-1:])
-                    y = F.layer_norm(y, y.shape[-1:])
+                    y = F.layer_norm(y.float(), y.shape[-1:])
+                    # y = F.layer_norm(y, y.shape[-1:])
 
             y = y.repeat_interleave(num_masked_views, dim=0)
             y = rearrange(y, 'b n c -> (b n) c')[mask]

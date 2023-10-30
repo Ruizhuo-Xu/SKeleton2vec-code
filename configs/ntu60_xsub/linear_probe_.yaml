@@ -2,12 +2,12 @@ train_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: /home/rz/ntu60_3danno_.pkl
+      anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
-        {name: PreNormalize3D, args: {align_spine: false, align_center: false}},
+        {name: PreNormalize3D, args: {align_spine: false}},
         {name: RandomRot, args: {theta: 0.3}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        {name: UniformSampleDecode, args: {clip_len: 90}},
+        {name: UniformSampleDecode, args: {clip_len: 120}},
         # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
         {name: FormatGCNInput, args: {}},
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
@@ -15,19 +15,19 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 128
+  batch_size: 64
   num_workers: 4
 
 val_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: /home/rz/ntu60_3danno_.pkl
+      anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
-        {name: PreNormalize3D, args: {align_spine: false, align_center: false}},
+        {name: PreNormalize3D, args: {align_spine: false}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        {name: UniformSampleDecode, args: {clip_len: 90}},
-        # {name: RandomResizedCrop, args: {p_interval: [0.95, 0.95], clip_len: 120}},
+        {name: UniformSampleDecode, args: {clip_len: 120}},
+        # {name: RandomResizedCrop, args: {p_interval: [0.95], clip_len: 120}},
         {name: FormatGCNInput, args: {}},
         {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
@@ -58,7 +58,7 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    encoder_pretrain_weight: /home/rz/epoch-800.pth
+    encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-500.pth
     encoder_freeze: true
     drop_path_p: 0.
   
