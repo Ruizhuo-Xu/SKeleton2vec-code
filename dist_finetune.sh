@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-export MASTER_PORT=$(($RANDOM % 20000 + 12000))
 set -x
+export MASTER_PORT=$(($RANDOM % 20000 + 12000))
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
 export CUDA_VISIBLE_DEVICES=0,1
 
 python dist_train.py \
---config configs/ntu60_xsub/fine_tune.yaml \
---name ntu60_xsub --tag fine_tune_800EP_1e-5minLR_3e-4baseLR_0.1LS_0.80LD_0.3dr_0.3DP_reinitNorm --port $MASTER_PORT --enable_amp --compile
+--config configs/ntu120_xsub/fine_tune.yaml \
+--name ntu120_xsub --tag fine_tune_3e-4lr_0.75ld --port $MASTER_PORT --enable_amp --compile

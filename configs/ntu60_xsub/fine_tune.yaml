@@ -52,22 +52,22 @@ model:
         att_drop_p: 0.
         forward_drop_p: 0.
         drop_path_p: 0.
-    cls_head_spec:
-      name: ClassificationHeadAttn
-      args:
-        n_classes: 60
-        hidden_dim: 2048
-        num_persons: 2
-        num_joints: 25
-        drop_p: 0.3
     # cls_head_spec:
-    #   name: ClassificationHeadLarge
+    #   name: ClassificationHeadAttn
     #   args:
     #     n_classes: 60
     #     hidden_dim: 2048
     #     num_persons: 2
     #     num_joints: 25
     #     drop_p: 0.3
+    cls_head_spec:
+      name: ClassificationHeadLarge
+      args:
+        n_classes: 60
+        hidden_dim: 2048
+        num_persons: 2
+        num_joints: 25
+        drop_p: 0.3
     encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-800.pth
     encoder_freeze: false
     drop_path_p: 0.30
@@ -93,7 +93,7 @@ lr_scheduler:
     mode: step
 
 label_smoothing: 0.1
-layer_decay: 0.8
+layer_decay: 0.75
 epoch_val: 1
 epoch_save: 200
 mode: fine_tune
