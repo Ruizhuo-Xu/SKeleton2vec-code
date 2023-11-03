@@ -6,4 +6,4 @@ export CUDA_VISIBLE_DEVICES=0,1
 
 python dist_train.py \
 --config configs/ntu120_xsub/fine_tune.yaml \
---name ntu120_xsub --tag fine_tune_0.4dpr --port $MASTER_PORT --enable_amp --compile
+--name ntu120_xsub --tag fine_tune_0.3dpr_1e-4lr --port $MASTER_PORT --enable_amp --compile

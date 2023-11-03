@@ -102,7 +102,7 @@ def prepare_training():
         if dist.get_rank() == 0:
             log('resume from the ckp: ' + config['resume'])
         sv_file = torch.load(config['resume'])
-        model = models.make(sv_file['model'], load_sd=True).cuda()
+        model = models.make(sv_file['model'], load_sd=True)
         optimizer = utils.make_optimizer(
             model.parameters(), sv_file['optimizer'], load_sd=True)
         epoch_start = sv_file['epoch'] + 1
@@ -116,7 +116,7 @@ def prepare_training():
         if sv_file.get('scaler'):
             loss_scaler.load_state_dict(sv_file['scaler'])
     else:
-        model = models.make(config['model']).cuda()
+        model = models.make(config['model'])
 
         # following timm: set wd as 0 for bias and norm layers
         if config.get('weight_decay_groups', False):
@@ -227,11 +227,13 @@ def train(train_loader, model, optimizer,
                 # else:
                 #     model.module.ema.decay = 1.0
                 #     model.module.ema_step()
-                current_lr = optimizer.param_groups[0]['lr']
+                current_lr_0 = optimizer.param_groups[0]['lr']
+                current_lr_1 = optimizer.param_groups[1]['lr']
                 tqdm.set_postfix(t, {'loss': train_loss.item(),
                                     'feat_loss': feat_loss.item(),
                                     'motion_loss': motion_loss.item(),
-                                    'lr': current_lr,
+                                    'lr_0': current_lr_0,
+                                    'lr_1': current_lr_1,
                                     'ema_decay': ema_decay})
             # torch.cuda.empty_cache()
     if dist.get_rank() == 0:
