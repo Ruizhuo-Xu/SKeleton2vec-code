@@ -2,14 +2,14 @@ test_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu60_3danno.pkl
+      anno_file: data/nturgbd/ntu120_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         {name: UniformSampleDecode, args: {clip_len: 90, num_clips: 10}},
         # {name: RandomResizedCrop, args: {p_interval: [0.95, 0.95], clip_len: 120}},
         {name: FormatGCNInput, args: {}},
-        {name: Collect, args: {keys: [keypoint, label], meta_keys: []}},
+        {name: Collect, args: {keys: [keypoint, label, total_frames, frame_dir], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, label]}},
       ]
       split: xsub_val
@@ -18,4 +18,5 @@ test_dataset:
 
 # ckp_path: save/ntu60_xsub_fine_tune_800EP_1e-5minLR_3e-4baseLR_0.1LS_0.8LD_0.3dr_0.3DP_new/epoch-last.pth
 # ckp_path: save/ntu60_xsub_linear_probe/epoch-best.pth
-ckp_path: save/ntu60_xsub_linear_probe_0.2rt_0.01lr/epoch-best.pth
+ckp_path: save/ntu120_xsub_fine_tune_3e-4lr_0.80ld_reinit0_swa/epoch-last.pth
+# ckp_path_: save/ntu120_xsub_fine_tune_3e-4lr_0.80ld_reinit0_noEMA/epoch-last.pth

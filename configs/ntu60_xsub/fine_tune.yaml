@@ -5,7 +5,7 @@ train_dataset:
       anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
-        {name: RandomRot, args: {theta: 0.3}},
+        {name: RandomRot, args: {theta: 0.2}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
         # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
@@ -52,28 +52,29 @@ model:
         att_drop_p: 0.
         forward_drop_p: 0.
         drop_path_p: 0.
-    # cls_head_spec:
-    #   name: ClassificationHeadAttn
-    #   args:
-    #     n_classes: 60
-    #     hidden_dim: 2048
-    #     num_persons: 2
-    #     num_joints: 25
-    #     drop_p: 0.3
     cls_head_spec:
-      name: ClassificationHeadLarge
+      name: ClassificationHeadTest
       args:
         n_classes: 60
         hidden_dim: 2048
         num_persons: 2
         num_joints: 25
         drop_p: 0.3
+    # cls_head_spec:
+    #   name: ClassificationHeadLarge
+    #   args:
+    #     n_classes: 60
+    #     hidden_dim: 2048
+    #     num_persons: 2
+    #     num_joints: 25
+    #     drop_p: 0.3
     encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-800.pth
     encoder_freeze: false
     drop_path_p: 0.30
     using_ema_model: true
     init_scale: 1.0
     reinit_last_norm: false
+    reinit_last_n_layers: 0
 
 optimizer:
   name: adamw
@@ -82,6 +83,12 @@ optimizer:
     # momentum: 0.9
     weight_decay: 5.e-2
 epoch_max: 100
+
+# swa:
+#   swa_start: 100
+#   swa_lr: 5.e-6
+#   swa_annel_epochs: 10
+#   swa_annel_strategy: cos
 
 lr_scheduler:
   name: CosineDecayWithWarmup
@@ -93,7 +100,7 @@ lr_scheduler:
     mode: step
 
 label_smoothing: 0.1
-layer_decay: 0.75
+layer_decay: 0.80
 epoch_val: 1
-epoch_save: 200
+epoch_save: 100
 mode: fine_tune

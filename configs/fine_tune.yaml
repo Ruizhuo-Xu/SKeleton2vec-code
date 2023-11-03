@@ -86,7 +86,7 @@ lr_scheduler:
     mode: step
 
 label_smoothing: 0.1
-layer_decay: 0.8
+layer_decay: 0.80
 epoch_val: 1
 epoch_save: 200
 mode: fine_tune

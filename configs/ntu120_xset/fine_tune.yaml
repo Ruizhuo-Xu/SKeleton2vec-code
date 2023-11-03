@@ -66,6 +66,7 @@ model:
     using_ema_model: true
     init_scale: 1.0
     reinit_last_norm: false
+    reinit_last_n_layers: 0
 
 optimizer:
   name: adamw
@@ -74,6 +75,12 @@ optimizer:
     # momentum: 0.9
     weight_decay: 5.e-2
 epoch_max: 100
+
+swa:
+  swa_start: 100
+  swa_lr: 5.e-6
+  swa_annel_epochs: 10
+  swa_annel_strategy: cos
 
 lr_scheduler:
   name: CosineDecayWithWarmup
@@ -85,7 +92,7 @@ lr_scheduler:
     mode: step
 
 label_smoothing: 0.1
-layer_decay: 0.75
+layer_decay: 0.80
 epoch_val: 1
-epoch_save: 200
+epoch_save: 100
 mode: fine_tune

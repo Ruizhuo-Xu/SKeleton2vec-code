@@ -18,4 +18,5 @@ test_dataset:
 
 # ckp_path: save/ntu60_xsub_fine_tune_800EP_1e-5minLR_3e-4baseLR_0.1LS_0.8LD_0.3dr_0.3DP_new/epoch-last.pth
 # ckp_path: save/ntu60_xsub_linear_probe/epoch-best.pth
-ckp_path: save/ntu60_xsub_fine_tune_1030/epoch-last.pth
+# ckp_path: save/ntu60_xsub_fine_tune_1030/epoch-last.pth
+ckp_path: save/ntu60_xsub_swa_test/epoch-last-swa.pth

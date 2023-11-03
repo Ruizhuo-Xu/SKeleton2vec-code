@@ -65,12 +65,19 @@ def make_test_data_loader():
 
 def load_model(checkpoint_path):
     checkpoint = torch.load(checkpoint_path)
+    # # 定义前缀
+    # prefix = 'module.'
+
+    # # 去除键的前缀
+    # checkpoint['model']['sd'] = {key.replace(prefix, ''): value for key, value in checkpoint['model']['sd'].items() if key.startswith(prefix)}
     model = models.make(checkpoint['model'], load_sd=True)
     return model
 
 @torch.no_grad()
-def test(test_loader, model, enable_amp=False):
+def test(test_loader, model, model_=None, enable_amp=False):
     model.eval()
+    if model_ is not None:
+        model_.eval()
     loss_fn = nn.CrossEntropyLoss()
     test_loss = utils.Averager()
     test_acc = utils.Accuracy()
@@ -83,6 +90,9 @@ def test(test_loader, model, enable_amp=False):
             labels = batch['label'].squeeze(-1)
             with torch.cuda.amp.autocast(enabled=enable_amp):
                 logits = model(inp)
+                if model_ is not None:
+                    logits_ = model_(inp)
+                    logits = (logits + logits_) / 2
                 loss = loss_fn(logits, labels)
             if not math.isfinite(loss.item()):
                 print("Loss is {}, stopping training".format(loss.item()), force=True)
@@ -115,6 +125,12 @@ def main(rank, world_size, config_, save_path, args):
     model = load_model(config['ckp_path'])
     model = model.cuda()
     model = DDP(model, device_ids=[rank], output_device=rank)
+    if config.get('ckp_path_') is not None:
+        model_ = load_model(config['ckp_path_'])
+        model_ = model_.cuda()
+        model_ = DDP(model_, device_ids=[rank], output_device=rank)
+    else:
+        model_ = None
     if args.compile:
         if rank == 0:
             log('Compiling model...')
@@ -123,7 +139,7 @@ def main(rank, world_size, config_, save_path, args):
     timer = utils.Timer()
     timer.s()
 
-    test_loss, test_acc = test(test_loader, model, args.enable_amp)
+    test_loss, test_acc = test(test_loader, model, model_, args.enable_amp)
     v = ddp_reduce(test_loss.v)
     n = ddp_reduce(test_loss.n)
     correct_num = ddp_reduce(test_acc.correct_num)

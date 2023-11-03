@@ -256,8 +256,8 @@ class ClassificationHeadLarge(nn.Sequential):
         )
 
 
-@models.register('ClassificationHeadAttn')
-class ClassificationHeadAttn(nn.Module):
+@models.register('ClassificationHeadTest')
+class ClassificationHeadTest(nn.Module):
     def __init__(self, emb_size: int = 256,
                  n_classes: int = 120,
                  hidden_dim: int = 2048,
@@ -271,39 +271,23 @@ class ClassificationHeadAttn(nn.Module):
         self.num_persons = num_persons
         self.num_joints = num_joints
         self.drop_p = drop_p
-        self.attn = nn.Linear(emb_size, 1)
-        # self.attn_spatial = nn.Linear(emb_size, 1)
-        self.fc1 = nn.Linear(emb_size*num_joints, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, n_classes)
         self.drop = nn.Dropout(drop_p)
-        self.relu = nn.ReLU(inplace=True)
-        self.bn = nn.BatchNorm1d(hidden_dim)
+        self.bn = nn.BatchNorm1d(emb_size)
+        # self.relu = nn.ReLU(inplace=True)
+        # self.fc = nn.Linear(emb_size*4, hidden_dim)
+        self.cls_head = nn.Linear(emb_size, n_classes)
     
     def forward(self, x):
-        attn_score = self.attn(x)  # (b, n, 1)
-        attn_score = rearrange(attn_score, '(b m) (t v) c -> b m t v c',
-                               m=self.num_persons, v=self.num_joints)
-        attn_score = F.softmax(attn_score, dim=2)
         x = rearrange(x, '(b m) (t v) c -> b m t v c',
                       m=self.num_persons, v=self.num_joints)
-        x = x * attn_score
-        x = reduce(x, 'b m t v c -> b m v c', reduction='sum')
-        x = rearrange(x, 'b m v c -> b m (v c)')
-        x = reduce(x, 'b m c -> b c', reduction='mean')
-        x = self.drop(x)
-        x = self.fc1(x)
-        x = self.bn(x)
-        x = self.relu(x)
+        x = reduce(x, 'b m t v c -> b c', reduction='mean')
         # x = self.drop(x)
-        x = self.fc2(x)
+        # x = self.fc(x)
+        x = self.bn(x)
+        # x = self.relu(x)
+        x = self.drop(x)
+        x = self.cls_head(x)
         return x
-
-
-
-
-        
-        
-                 
                  
 @models.register('SkT')
 class SkT(nn.Module):
@@ -538,92 +522,6 @@ class SkTWithDecoder(nn.Module):
 
         return x_masked, mask, ids_restore, ids_keep
 
-        # N, _, D = x.shape
-        # TP = self.temporal_segments
-        # VP = self.spatio_size
-        # len_VP_keep = int(VP * (1 - mask_ratio))
-        # x = rearrange(x, 'n (t v) d -> n t v d', t=TP, v=VP)
-        # s = self.temporal_segment_size
-        # x_motion = rearrange(x_motion, 'b n m (t s) v c -> (b n m) t v (s c)', s=s)
-        
-        # # calculate the temporal attention score, based on motion intensity
-        # # motion_intensity = x_motion.pow(2)
-        # motion_intensity = x_motion.abs()
-        # temporal_motion_attn = reduce(motion_intensity, 'n t v c -> n t', 'mean')
-        # # temporal_motion_attn = temporal_motion_attn / (temporal_motion_attn.sum(dim=1, keepdim=True) + 1e-6)
-        # temporal_motion_attn = (temporal_motion_attn /
-        #                         (temporal_motion_attn.max(dim=1, keepdim=True).values
-        #                         + 1e-6))
-        # temporal_motion_attn = F.softmax(temporal_motion_attn, dim=1)
-        # # Divide tubes according to temporal attention scores
-        # accum_temporal_attn = 0
-        # segment_states = torch.zeros_like(temporal_motion_attn, device=x.device)
-        # for i in range(TP):
-        #     accum_temporal_attn += temporal_motion_attn[:, i]
-        #     is_segment_end = (accum_temporal_attn > t_tau)
-        #     if i > 0:
-        #         segment_states[:, i-1] = is_segment_end
-        #         accum_temporal_attn = torch.where(is_segment_end, temporal_motion_attn[:, i], accum_temporal_attn)
-        #     else:
-        #         segment_states[:, i] = is_segment_end
-        #         accum_temporal_attn = torch.where(is_segment_end, 0, accum_temporal_attn)
-        # # the final frame is always the end of segment
-        # segment_states[:, -1] = 1
-        # masked_views = segment_states.sum(dim=1).max()
-        # masked_views = int(masked_views.item())
-
-        # # Determine the joint to be masked according to the spatial attention score
-        # spatial_motion_attn = torch.zeros((N, masked_views, VP), device=x.device)
-        # masked_views_idxs = torch.zeros((N,), device=x.device).long()
-        # accum_spatial_attn = 0
-        # motion_intensity = reduce(motion_intensity, 'n t v c -> n t v', 'mean')
-        # for i in range(TP):
-        #     accum_spatial_attn += motion_intensity[:, i]
-        #     spatial_motion_attn[torch.arange(N), masked_views_idxs] = accum_spatial_attn
-        #     masked_views_idxs = torch.where(segment_states[:, i].bool(),
-        #                                     masked_views_idxs + 1,
-        #                                     masked_views_idxs)
-        #     accum_spatial_attn = torch.where(segment_states[:, i, None].bool().repeat(1, 1, VP),
-        #                                      0, accum_spatial_attn)
-        # spatial_motion_attn = (spatial_motion_attn /
-        #                        (spatial_motion_attn.max(dim=-1, keepdim=True).values
-        #                         + 1e-6))
-        # # spatial_motion_prob = F.softmax(spatial_motion_attn, dim=-1)
-        # # noise = torch.log(spatial_motion_prob)\
-        # #     - torch.log(-torch.log(torch.rand(N, masked_views, VP, device=x.device) + 1e-6) + 1e-6)
-        # noise = torch.rand(N, masked_views, VP, device=x.device)
-        # noise = noise + s_tau * spatial_motion_attn
-
-        # segment_state_ = segment_states.cumsum(dim=1)
-        # segment_state_[segment_states == 1] -= 1
-
-        # # noise = torch.rand(N, masked_views, VP, device=x.device)
-        # # sort noise for each sample
-        # ids_shuffle = torch.argsort(
-        #     noise, dim=-1
-        # )  # ascend: small is keep, large is remove
-        # ids_restore = torch.argsort(ids_shuffle, dim=-1)
-
-        # ids_shuffle = torch.gather(ids_shuffle, dim=1,
-        #                            index=segment_state_.unsqueeze(-1).repeat(1, 1, VP).long())
-        # ids_restore = torch.gather(ids_restore, dim=1,
-        #                            index=segment_state_.unsqueeze(-1).repeat(1, 1, VP).long())
-
-        # # keep the first subset
-        # ids_keep = ids_shuffle[:, :, :len_VP_keep]
-        # x_masked = torch.gather(x.view(N, TP, VP, D), dim=2,
-        #                         index=ids_keep.unsqueeze(-1).repeat(1, 1, 1, D))
-        # x_masked = rearrange(x_masked, 'n t v d -> n (t v) d')
-
-        # # generate the binary mask: 0 is keep, 1 is remove
-        # mask = torch.ones([N, TP, VP], device=x.device)
-        # mask[:, :, :len_VP_keep] = 0
-        # # unshuffle to get the binary mask
-        # mask = torch.gather(mask, dim=2, index=ids_restore)
-        # mask = rearrange(mask, 'n t v -> n (t v)')
-
-        # return x_masked, mask, ids_restore, ids_keep
-    
     def forward_encoder(self, x, mask_ratio: float = 0.,
                         tube_len: int = 6,
                         x_motion: torch.Tensor = None,
@@ -715,10 +613,12 @@ class SkTForClassification(nn.Module):
                  using_ema_model: bool = True,
                  init_scale: float = 0.001,
                  reinit_last_norm: bool = False,
+                 reinit_last_n_layers: int = 0
                  ):
         super().__init__()
         self.init_scale = init_scale
         self.reinit_last_norm = reinit_last_norm
+        self.reinit_last_n_layer = reinit_last_n_layers
         if encoder_pretrain_weight:
             sv_file = torch.load(encoder_pretrain_weight)
             sv_file['model']['args']['model_spec']['args']['drop_path_p'] = drop_path_p
@@ -727,11 +627,8 @@ class SkTForClassification(nn.Module):
                 self.encoder = loaded_model.ema.model
             else:
                 self.encoder = loaded_model.auto_encoder
-            if reinit_last_norm:
+            if reinit_last_norm or reinit_last_n_layers > 0:
                 self.encoder.encoder_norm = nn.LayerNorm(self.encoder.encoder_emb_size)
-
-            # loaded_model = models.make(encoder_spec)
-            # self.encoder = loaded_model.load_from_checkpoint(encoder_pretrain_weight).model.auto_encoder
         else:
             self.encoder = models.make(encoder_spec)
         if encoder_freeze:
@@ -740,7 +637,7 @@ class SkTForClassification(nn.Module):
             self.encoder.requires_grad_(True)
         self.encoder_freeze = encoder_freeze
         self.emb_size = self.encoder.encoder_emb_size
-        # self.norm = nn.LayerNorm(self.emb_size)
+        # self.norm = nn.LayerNorm(self.emb_size*4)
 
         self.cls_head = models.make(cls_head_spec,
                                     args={'emb_size': self.emb_size})
@@ -748,13 +645,16 @@ class SkTForClassification(nn.Module):
             # if have pretrain weight, only init cls head
             # self.cls_head.apply(self._xavier_init_weights)
             if encoder_freeze:
-                self.cls_head.apply(self._init_weights)
+                self.cls_head.apply(self._linear_init_weights)
             else:
                 self.cls_head.apply(self._finetune_init_weights)
+                if reinit_last_n_layers > 0:
+                    for i in range(reinit_last_n_layers):
+                        self.encoder.encoder.layers[-1 - i].apply(self._finetune_init_weights)
         else:
-            self.apply(self._xavier_init_weights)
+            self.apply(self._finetune_init_weights)
 
-    def _init_weights(self, m):
+    def _linear_init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.01)
             if isinstance(m, nn.Linear) and m.bias is not None:
@@ -787,8 +687,9 @@ class SkTForClassification(nn.Module):
 
     def extract_feat(self, x):
         return self.encoder.forward_encoder(x)['last_hidden_state']
-        # feats = self.encoder.forward_encoder(x)['hidden_states']
-        # feat = sum(feats) / len(feats)
+        # feats = self.encoder.forward_encoder(x)['hidden_states'][-4:]
+        # feat = torch.concatenate(feats, dim=-1)
+        # # feat = sum(feats) / len(feats)
         # return self.norm(feat)
 
     def forward_train(self, x):

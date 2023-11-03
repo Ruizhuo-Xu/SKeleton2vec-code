@@ -7,7 +7,6 @@ train_dataset:
         {name: PreNormalize3D, args: {align_spine: false}},
         {name: RandomRot, args: {theta: 0.3}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
         {name: ToMotion, args: {}},
         {name: FormatGCNInput, args: {keys: ['keypoint', 'motion']}},
@@ -17,24 +16,23 @@ train_dataset:
       split: xset_train
       # first_k: 100
   batch_size: 64
-  num_workers: 8
+  num_workers: 4
 
 val_dataset:
   dataset:
     name: PoseDataset
     args:
-      anno_file: data/nturgbd/ntu60_3danno.pkl
+      anno_file: data/nturgbd/ntu120_3danno.pkl
       pipelines: [
-        {name: PreNormalize3D, args: {}},
+        {name: PreNormalize3D, args: {align_spine: false}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
         {name: ToMotion, args: {}},
         {name: FormatGCNInput, args: {keys: ['keypoint', 'motion']}},
         {name: Collect, args: {keys: [keypoint, motion, label], meta_keys: []}},
         {name: ToTensor, args: {keys: [keypoint, motion, label]}},
       ]
-      split: xview_val
+      split: xset_val
   batch_size: 8
   num_workers: 0
 
@@ -51,7 +49,7 @@ model:
         encoder_emb_size: 256
         decoder_emb_size: 256
         encoder_depth: 8
-        decoder_depth: 3
+        decoder_depth: 5
         num_heads: 8
         att_drop_p: 0.
         forward_drop_p: 0.
@@ -63,20 +61,12 @@ model:
     ema_spec:
       name: EMA
       args:
-        # ema_decay: 0.9998
         ema_decay: 0.9999
-        # ema_end_decay: 0.99999
         ema_end_decay: 1.0
-        # ema_anneal_end_step: 62800
-        # ema_anneal_end_step: 125600
-        # ema_anneal_end_step: 251200
         ema_anneal_end_step: 340800
-        # ema_anneal_end_step: 83600
     average_top_k_layers: 8
     norm_target_per_layer: instance_norm
     normalize_targets: true
-  
-# resume: save/nturgbd60_pretrain_skt2vec2_mask0.90_largeEMA_tube_resume/epoch-last.pth
 
 optimizer:
   name: adamw
@@ -91,10 +81,11 @@ lr_scheduler:
   name: CosineDecayWithWarmup
   args:
     warmup_epochs: 20
-    max_epochs: 800
+    max_epochs: 1600
     base_lr: 1.e-3
     min_lr: 1.e-5
     mode: step
+epoch_max: 1600
 
 mask_ratio: 0.90
 tube_len: 5
@@ -104,8 +95,6 @@ motion_loss_weight: 1.0
 random_tube: false
 num_masked_views: 1
 grad_accum_steps: 1
-# smooth_l1_beta: 1.
 clip_grad: 4.0
-epoch_max: 800
-epoch_val: 1000
-epoch_save: [100, 200, 300, 400, 500, 600, 700, 800]
+epoch_val: 2000
+epoch_save: [800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600]

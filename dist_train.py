@@ -164,6 +164,7 @@ def train(train_loader, model, optimizer,
     train_loss = utils.Averager()
     train_acc = utils.Accuracy()
     grad_norm_rec = []
+    clip_grad = config.get('clip_grad')
 
     with tqdm(train_loader,leave=False, desc='train', ascii=True) as t:
         for iter_step, batch in enumerate(t, 1):
@@ -188,7 +189,8 @@ def train(train_loader, model, optimizer,
             train_acc.add(preds, labels)
 
             optimizer.zero_grad()
-            grad_norm = loss_scaler(loss, optimizer, parameters=model.parameters())
+            grad_norm = loss_scaler(loss, optimizer, clip_grad,
+                                    parameters=model.parameters())
             grad_norm_rec.append(grad_norm.item())
             # loss.backward()
             # optimizer.step()
