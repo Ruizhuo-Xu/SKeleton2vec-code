@@ -7,7 +7,7 @@ wandb offline
 
 python dist_pretrain2.py \
     --config configs/ntu120xsub_pretrain_skt2vec2.yaml \
-    --name nturgbd120_xsub --tag pretrain_skt2vec2_256BSZ_5D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema9999_1600EP --port $MASTER_PORT \
+    --name nturgbd120_xsub --tag pretrain_skt2vec2_128BSZ_5D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema9999_800EP_${MASTER_PORT} --port $MASTER_PORT \
     --compile \
     --nodes 1 --node_rank 0
 

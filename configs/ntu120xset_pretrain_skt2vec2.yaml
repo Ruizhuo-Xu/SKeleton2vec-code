@@ -15,7 +15,7 @@ train_dataset:
       ]
       split: xset_train
       # first_k: 100
-  batch_size: 64
+  batch_size: 32
   num_workers: 4
 
 val_dataset:
@@ -81,11 +81,11 @@ lr_scheduler:
   name: CosineDecayWithWarmup
   args:
     warmup_epochs: 20
-    max_epochs: 1600
+    max_epochs: 800
     base_lr: 1.e-3
     min_lr: 1.e-5
     mode: step
-epoch_max: 1600
+epoch_max: 800
 
 mask_ratio: 0.90
 tube_len: 5
@@ -97,4 +97,4 @@ num_masked_views: 1
 grad_accum_steps: 1
 clip_grad: 4.0
 epoch_val: 2000
-epoch_save: [800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600]
+epoch_save: [100, 200, 300, 400, 500, 600, 700, 800]
