@@ -5,7 +5,7 @@ train_dataset:
       anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
-        {name: RandomRot, args: {theta: 0.2}},
+        {name: RandomRot, args: {theta: 0.3}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
         # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
@@ -69,6 +69,7 @@ model:
         num_joints: 25
         drop_p: 0.3
     encoder_pretrain_weight: checkpoints/ntu60_xsub/ntu60_xsub_pretrain_1e-3lr_1e-5min_lr/epoch-800.pth
+    # encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-800.pth
     encoder_freeze: false
     drop_path_p: 0.30
     using_ema_model: true

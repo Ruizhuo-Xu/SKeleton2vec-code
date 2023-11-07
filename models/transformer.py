@@ -244,15 +244,15 @@ class ClassificationHeadLarge(nn.Sequential):
                  drop_p: float = 0.):
         super().__init__(
             # nn.LayerNorm(emb_size), 
+            nn.Dropout(drop_p),
             Rearrange('(B M) (T J) C -> B M T J C', M=num_persons, J=num_joints),
             Reduce('B M T J C -> B M J C', reduction='mean'),
             Rearrange('B M J C -> B M (J C)'),
             Reduce('B M C -> B C', reduction='mean'),
-            nn.Dropout(drop_p),
             nn.Linear(emb_size*num_joints, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(inplace=True),
-            nn.Dropout(drop_p),
+            # nn.Dropout(drop_p),
             nn.Linear(hidden_dim, n_classes)
         )
 
@@ -487,7 +487,7 @@ class SkTWithDecoder(nn.Module):
         motion_intensity = x_motion.abs()
         motion_intensity = reduce(motion_intensity, 'n t v c -> n t v', 'mean')
         motion_intensity = motion_intensity.view(-1, TP_, tube_len, VP).mean(dim=2)
-        motion_intensity = motion_intensity / (motion_intensity.max(dim=1, keepdim=True).values + 1e-6)
+        motion_intensity = motion_intensity / (motion_intensity.max(dim=2, keepdim=True).values + 1e-6)
 
         # Divide the dimension of time into several tubes
         noise = torch.rand(N, TP_, VP, device=x.device)  # noise in [0, 1]

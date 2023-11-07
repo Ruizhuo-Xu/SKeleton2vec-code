@@ -15,7 +15,7 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 24
+  batch_size: 32
   num_workers: 8
 
 val_dataset:
@@ -33,6 +33,7 @@ val_dataset:
         {name: ToTensor, args: {keys: [keypoint, label]}},
       ]
       split: xsub_val
+      # first_k: 100
   batch_size: 32
   num_workers: 8
 
@@ -68,7 +69,8 @@ model:
         num_persons: 2
         num_joints: 25
         drop_p: 0.3
-    encoder_pretrain_weight: checkpoints/ntu120_xsub/epoch-800.pth
+    # encoder_pretrain_weight: checkpoints/ntu120_xsub/epoch-800.pth
+    encoder_pretrain_weight: save/nturgbd120_xsub_pretrain_skt2vec2_128BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema9999_800EP_18231/epoch-last.pth
     encoder_freeze: false
     drop_path_p: 0.30
     using_ema_model: true
@@ -95,7 +97,7 @@ lr_scheduler:
   args:
     warmup_epochs: 5
     max_epochs: 100
-    base_lr: 1.e-4
+    base_lr: 3.e-4
     min_lr: 1.e-5
     mode: step
 

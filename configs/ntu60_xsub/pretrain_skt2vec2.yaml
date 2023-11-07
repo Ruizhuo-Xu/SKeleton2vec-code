@@ -7,7 +7,6 @@ train_dataset:
         {name: PreNormalize3D, args: {align_spine: false}},
         {name: RandomRot, args: {theta: 0.3}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
         {name: ToMotion, args: {}},
         {name: FormatGCNInput, args: {keys: ['keypoint', 'motion']}},
@@ -17,7 +16,7 @@ train_dataset:
       split: xsub_train
       # first_k: 100
   batch_size: 64
-  num_workers: 8
+  num_workers: 2
 
 val_dataset:
   dataset:
@@ -27,7 +26,6 @@ val_dataset:
       pipelines: [
         {name: PreNormalize3D, args: {}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
-        # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
         {name: ToMotion, args: {}},
         {name: FormatGCNInput, args: {keys: ['keypoint', 'motion']}},
@@ -63,14 +61,9 @@ model:
     ema_spec:
       name: EMA
       args:
-        # ema_decay: 0.9998
-        ema_decay: 0.999
-        # ema_end_decay: 0.99999
+        ema_decay: 0.9999
         ema_end_decay: 1.0
-        # ema_anneal_end_step: 125600
         ema_anneal_end_step: 251200
-        # ema_anneal_end_step: 236000
-        # ema_anneal_end_step: 83600
     average_top_k_layers: 8
     norm_target_per_layer: instance_norm
     normalize_targets: true
@@ -98,7 +91,7 @@ lr_scheduler:
 
 mask_ratio: 0.90
 tube_len: 5
-s_tau: 0.20
+s_tau: 0.30
 t_tau: 0.15
 motion_loss_weight: 1.0
 random_tube: false

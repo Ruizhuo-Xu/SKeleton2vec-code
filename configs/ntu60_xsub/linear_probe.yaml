@@ -15,7 +15,7 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 64
+  batch_size: 128
   num_workers: 4
 
 val_dataset:
@@ -58,9 +58,14 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
+    # encoder_pretrain_weight: checkpoints/ntu60_xsub/ntu60_xsub_pretrain_1e-3lr_1e-5min_lr/epoch-800.pth
     encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-800.pth
     encoder_freeze: true
     drop_path_p: 0.
+    using_ema_model: true
+    init_scale: 1.0
+    reinit_last_norm: false
+    reinit_last_n_layers: 0
   
 # resume: save/nturgbd60_pretrain_test_bz64-lr3e-4-mask0.8-wd1e-2-L2/epoch-last.pth
 

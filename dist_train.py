@@ -196,7 +196,10 @@ def train(train_loader, model, optimizer,
             # optimizer.step()
 
             current_lr_0 = optimizer.param_groups[0]['lr']
-            current_lr_1 = optimizer.param_groups[1]['lr']
+            if len(optimizer.param_groups) > 1:
+                current_lr_1 = optimizer.param_groups[1]['lr']
+            else:
+                current_lr_1 = 0
             tqdm.set_postfix(t, {'loss': train_loss.item(),
                                  'lr_0': current_lr_0,
                                  'lr_1': current_lr_1,
