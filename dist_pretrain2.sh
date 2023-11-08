@@ -6,6 +6,6 @@ export CUDA_VISIBLE_DEVICES=0,1
 
 python dist_pretrain2.py \
     --config configs/ntu60_xsub/pretrain_skt2vec2.yaml \
-    --name ntu60_xsub --tag pretrain_1e-3lr_1e-5minlr_0.3tau_${MASTER_PORT} --port $MASTER_PORT \
+    --name ntu60_xsub --tag pretrain_1e-3lr_1e-5minlr_0.2tau_4layers_${MASTER_PORT} --port $MASTER_PORT \
     --enable_amp --compile \
     --nodes 1 --node_rank 0

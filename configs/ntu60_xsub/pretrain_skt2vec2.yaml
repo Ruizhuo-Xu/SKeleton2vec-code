@@ -64,7 +64,7 @@ model:
         ema_decay: 0.9999
         ema_end_decay: 1.0
         ema_anneal_end_step: 251200
-    average_top_k_layers: 8
+    average_top_k_layers: 4
     norm_target_per_layer: instance_norm
     normalize_targets: true
   
@@ -91,7 +91,7 @@ lr_scheduler:
 
 mask_ratio: 0.90
 tube_len: 5
-s_tau: 0.30
+s_tau: 0.20
 t_tau: 0.15
 motion_loss_weight: 1.0
 random_tube: false

@@ -15,8 +15,8 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 24
-  num_workers: 8
+  batch_size: 32
+  num_workers: 2
 
 val_dataset:
   dataset:
@@ -34,7 +34,7 @@ val_dataset:
       ]
       split: xsub_val
   batch_size: 32
-  num_workers: 8
+  num_workers: 2
 
 model:
   name: SkTForClassification

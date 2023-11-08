@@ -15,8 +15,8 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 128
-  num_workers: 4
+  batch_size: 64
+  num_workers: 2
 
 val_dataset:
   dataset:
@@ -34,7 +34,7 @@ val_dataset:
       ]
       split: xsub_val
   batch_size: 128
-  num_workers: 4
+  num_workers: 2
 
 model:
   name: SkTForClassification
@@ -58,8 +58,8 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    # encoder_pretrain_weight: checkpoints/ntu60_xsub/ntu60_xsub_pretrain_1e-3lr_1e-5min_lr/epoch-800.pth
-    encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-800.pth
+    encoder_pretrain_weight: checkpoints/ntu60_xsub/ntu60_xsub_pretrain_1e-3lr_1e-5minlr_18768/epoch-600.pth
+    # encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-800.pth
     encoder_freeze: true
     drop_path_p: 0.
     using_ema_model: true
