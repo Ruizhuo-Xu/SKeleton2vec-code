@@ -487,7 +487,7 @@ class SkTWithDecoder(nn.Module):
         motion_intensity = x_motion.abs()
         motion_intensity = reduce(motion_intensity, 'n t v c -> n t v', 'mean')
         motion_intensity = motion_intensity.view(-1, TP_, tube_len, VP).mean(dim=2)
-        motion_intensity = motion_intensity / (motion_intensity.max(dim=1, keepdim=True).values + 1e-6)
+        motion_intensity = motion_intensity / (motion_intensity.max(dim=2, keepdim=True).values + 1e-6)
 
         # Divide the dimension of time into several tubes
         noise = torch.rand(N, TP_, VP, device=x.device)  # noise in [0, 1]

@@ -5,7 +5,7 @@ train_dataset:
       anno_file: data/pku/pkuv1_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
-        {name: RandomRot, args: {theta: 0.2}},
+        {name: RandomRot, args: {theta: 0.3}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
         # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
@@ -15,8 +15,8 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 64
-  num_workers: 4
+  batch_size: 128
+  num_workers: 2
 
 val_dataset:
   dataset:
@@ -34,7 +34,7 @@ val_dataset:
       ]
       split: xsub_val
   batch_size: 128
-  num_workers: 4
+  num_workers: 2
 
 model:
   name: SkTForClassification
@@ -58,14 +58,14 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    # encoder_pretrain_weight: save/pkuv1_xsub_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema999_800EP/epoch-800.pth
-    encoder_pretrain_weight: save/pkuv1_xsub_pretrain_skt2vec2_64BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.3_ema999_800EP/epoch-800.pth
-    
+    encoder_pretrain_weight: save/pkuv1_xsub_pretrain_1e-3lr_5e-4minlr_0.1tau_8layers_dim2_12234/epoch-600.pth
     encoder_freeze: true
     drop_path_p: 0.
+    using_ema_model: true
+    init_scale: 1.0
+    reinit_last_norm: false
+    reinit_last_n_layers: 0
   
-# resume: save/nturgbd60_pretrain_test_bz64-lr3e-4-mask0.8-wd1e-2-L2/epoch-last.pth
-
 optimizer:
   name: sgd
   args:
@@ -79,7 +79,7 @@ lr_scheduler:
   args:
     warmup_epochs: 0
     max_epochs: 100
-    base_lr: 0.01
+    base_lr: 0.1
     min_lr: 0.
     mode: step
 # lr_scheduler:

@@ -15,7 +15,7 @@ train_dataset:
       ]
       split: xsub_train
       # first_k: 100
-  batch_size: 64
+  batch_size: 128
   num_workers: 2
 
 val_dataset:
@@ -58,8 +58,9 @@ model:
         n_classes: 60
         num_persons: 2
         drop_p: 0.
-    encoder_pretrain_weight: checkpoints/ntu60_xsub/ntu60_xsub_pretrain_1e-3lr_1e-5minlr_18768/epoch-600.pth
-    # encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-800.pth
+    # encoder_pretrain_weight: save/ntu60_xsub_pretrain_1e-3lr_1e-5minlr_0.2tau_4layers_12909/epoch-100.pth
+    # encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-300.pth
+    encoder_pretrain_weight: /home/rz/epoch-500.pth
     encoder_freeze: true
     drop_path_p: 0.
     using_ema_model: true

@@ -8,7 +8,7 @@ export CUDA_VISIBLE_DEVICES=0,1
 
 python dist_pretrain2.py \
     --config configs/ntu120xsub_pretrain_skt2vec2.yaml \
-    --name nturgbd120_xsub --tag pretrain_skt2vec2_128BSZ_3D_1e-3baseLR_1e-5minLR_tube5_tau0.2_ema9999_800EP_${MASTER_PORT} --port $MASTER_PORT \
-    --enable_amp --compile \
+    --name nturgbd120_xsub --tag pretrain_skt2vec2_128BSZ_3D_spati_${MASTER_PORT} --port $MASTER_PORT \
+    --compile \
     --nodes 1 --node_rank 0
 

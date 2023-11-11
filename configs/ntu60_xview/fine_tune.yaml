@@ -60,7 +60,7 @@ model:
         num_persons: 2
         num_joints: 25
         drop_p: 0.3
-    encoder_pretrain_weight: checkpoints/ntu60_xview/epoch-800.pth
+    # encoder_pretrain_weight: checkpoints/ntu60_xview/epoch-800.pth
     encoder_freeze: false
     drop_path_p: 0.30
     using_ema_model: true

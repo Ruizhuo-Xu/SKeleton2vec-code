@@ -17,7 +17,7 @@ train_dataset:
       split: xsub_train
       # first_k: 100
   batch_size: 64
-  num_workers: 8
+  num_workers: 2
 
 val_dataset:
   dataset:
@@ -64,7 +64,7 @@ model:
       name: EMA
       args:
         # ema_decay: 0.9998
-        ema_decay: 0.999
+        ema_decay: 0.9999
         # ema_end_decay: 0.99999
         ema_end_decay: 1.0
         # ema_anneal_end_step: 62800
@@ -98,7 +98,7 @@ lr_scheduler:
 
 mask_ratio: 0.90
 tube_len: 5
-s_tau: 0.20
+s_tau: 0.10
 t_tau: 0.15
 motion_loss_weight: 1.0
 random_tube: false

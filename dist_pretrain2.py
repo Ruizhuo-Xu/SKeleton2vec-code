@@ -235,7 +235,7 @@ def train(train_loader, model, optimizer,
                                     'lr_0': current_lr_0,
                                     'lr_1': current_lr_1,
                                     'ema_decay': ema_decay})
-            # torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
     if dist.get_rank() == 0:
         grad_norm_avg = sum(grad_norm_rec) / len(grad_norm_rec)
         log(f'Epoch {epoch+1}, grad norm average: {grad_norm_avg:.4f}, '
