@@ -5,7 +5,7 @@ train_dataset:
       anno_file: data/nturgbd/ntu60_3danno.pkl
       pipelines: [
         {name: PreNormalize3D, args: {align_spine: false}},
-        {name: RandomRot, args: {theta: 0.2}},
+        {name: RandomRot, args: {theta: 0.3}},
         {name: GenSkeFeat, args: {dataset: 'nturgb+d', feats:['j']}},
         {name: UniformSampleDecode, args: {clip_len: 90}},
         # {name: RandomResizedCrop, args: {p_interval: [0.5, 1.0], clip_len: 120}},
@@ -17,7 +17,7 @@ train_dataset:
       data_ratio: 0.01
       # first_k: 100
   batch_size: 24
-  num_workers: 8
+  num_workers: 2
 
 val_dataset:
   dataset:
@@ -35,7 +35,7 @@ val_dataset:
       ]
       split: xsub_val
   batch_size: 32
-  num_workers: 8
+  num_workers: 2
 
 model:
   name: SkTForClassification
@@ -61,9 +61,13 @@ model:
         num_persons: 2
         num_joints: 25
         drop_p: 0.3
-    encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-800.pth
+    encoder_pretrain_weight: checkpoints/ntu60_xsub/11-11/epoch-600.pth
     encoder_freeze: false
     drop_path_p: 0.30
+    using_ema_model: true
+    init_scale: 1.0
+    reinit_last_norm: false
+    reinit_last_n_layers: 0
 
 optimizer:
   name: adamw
@@ -78,12 +82,12 @@ lr_scheduler:
   args:
     warmup_epochs: 5
     max_epochs: 100
-    base_lr: 1.e-4
+    base_lr: 3.e-4
     min_lr: 1.e-5
     mode: step
 
 label_smoothing: 0.1
 layer_decay: 0.8
-epoch_val: 1
+epoch_val: 10
 epoch_save: 200
 mode: fine_tune

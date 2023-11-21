@@ -16,4 +16,5 @@ test_dataset:
   batch_size: 16
   num_workers: 4
 
-ckp_path: save/pkuv2_xsub_linear_probe/epoch-best.pth
+# ckp_path: save/experiments/pkuv2_xsub/pkuv2_xsub_transfer_ntu60_xsub/epoch-best.pth
+ckp_path: save/experiments/pkuv2_xsub/pkuv2_xsub_transfer_ntu120_xsub/epoch-best.pth

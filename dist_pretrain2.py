@@ -404,6 +404,10 @@ if __name__ == "__main__":
                         help='Enabling automatic mixed precision')
     parser.add_argument('--compile', action='store_true', default=False,
                         help='Enabling torch.Compile')
+    parser.add_argument('--alpha', type=int, default=None)
+    parser.add_argument('--beta', type=float, default=None)
+    parser.add_argument('--save_path', default='./save')
+    parser.add_argument('--mask_ratio', type=float,default=None)
     args = parser.parse_args()
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -417,10 +421,17 @@ if __name__ == "__main__":
         save_name = '_' + args.config.split('/')[-1][:-len('.yaml')]
     if args.tag is not None:
         save_name += '_' + args.tag
-    save_path = os.path.join('./save', save_name)
+    save_path = os.path.join(args.save_path, save_name)
     
     if args.enable_amp:
         print('Enable amp')
+    
+    if args.alpha is not None:
+        config['tube_len'] = args.alpha
+    if args.beta is not None:
+        config['s_tau'] = args.beta
+    if args.mask_ratio is not None:
+        config['mask_ratio'] = args.mask_ratio
 
     gpus = torch.cuda.device_count()
     # world_size = gpus * args.nodes

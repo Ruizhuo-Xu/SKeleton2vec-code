@@ -2,8 +2,8 @@
 export MASTER_PORT=$(($RANDOM % 20000 + 12000))
 set -x
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=3
 
 python test.py \
---config configs/ntu120_xset/test.yaml \
+--config configs/pkuv2_xsub/test.yaml \
 --port $MASTER_PORT --enable_amp

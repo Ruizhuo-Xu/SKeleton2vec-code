@@ -7,9 +7,6 @@ export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:1024
 
 
 python dist_train.py \
---config configs/ntu60_xsub/fine_tune.yaml \
---name ntu60_xsub --tag fine_tune_bug_fix_teacher --port $MASTER_PORT --enable_amp --compile
-
-# python dist_train.py \
-# --config configs/ntu120_xsub/fine_tune.yaml \
-# --name ntu120_xsub --tag fine_tune_bug_fix_teacher --port $MASTER_PORT --enable_amp --compile
+--config configs/ntu120_xset/fine_tune.yaml \
+--name ntu120_xset --tag fine_tune_600EP_1e-4lr --port $MASTER_PORT --enable_amp --compile \
+--save_path ./save/experiments/ntu120_xset/

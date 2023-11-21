@@ -99,6 +99,6 @@ num_masked_views: 1
 grad_accum_steps: 1
 # smooth_l1_beta: 1.
 clip_grad: 4.0
-epoch_max: 800
+epoch_max: 200
 epoch_val: 1000
 epoch_save: [100, 200, 300, 400, 500, 600, 700, 800]

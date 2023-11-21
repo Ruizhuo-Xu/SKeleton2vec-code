@@ -16,7 +16,7 @@ train_dataset:
       split: xset_train
       # first_k: 100
   batch_size: 24
-  num_workers: 8
+  num_workers: 2
 
 val_dataset:
   dataset:
@@ -34,7 +34,7 @@ val_dataset:
       ]
       split: xset_val
   batch_size: 32
-  num_workers: 8
+  num_workers: 2
 
 model:
   name: SkTForClassification
@@ -60,7 +60,7 @@ model:
         num_persons: 2
         num_joints: 25
         drop_p: 0.3
-    encoder_pretrain_weight: checkpoints/ntu120_xset/epoch-800.pth
+    encoder_pretrain_weight: checkpoints/ntu120_xset/final/epoch-600.pth
     encoder_freeze: false
     drop_path_p: 0.30
     using_ema_model: true
@@ -76,18 +76,12 @@ optimizer:
     weight_decay: 5.e-2
 epoch_max: 100
 
-swa:
-  swa_start: 100
-  swa_lr: 5.e-6
-  swa_annel_epochs: 10
-  swa_annel_strategy: cos
-
 lr_scheduler:
   name: CosineDecayWithWarmup
   args:
     warmup_epochs: 5
     max_epochs: 100
-    base_lr: 3.e-4
+    base_lr: 1.e-4
     min_lr: 1.e-5
     mode: step
 

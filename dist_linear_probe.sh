@@ -8,10 +8,12 @@ export CUDA_VISIBLE_DEVICES=0,1
 # --config configs/ntu60_xsub/linear_probe_.yaml \
 # --name ntu60_xsub --tag linear_probe_randomClip --port $MASTER_PORT --enable_amp --compile
 
-# python dist_train.py \
-# --config configs/ntu60_xsub/linear_probe.yaml \
-# --name ntu60_xsub --tag linear_probe_teacher_ --port $MASTER_PORT --enable_amp --compile
-
 python dist_train.py \
---config configs/pkuv1_xsub/linear_probe.yaml \
---name pkuv1_xsub --tag linear_probe_teacher --port $MASTER_PORT --enable_amp --compile
+--config configs/ntu120_xset/linear_probe.yaml \
+--name ntu120_xset --tag linear_probe_teacher_800EP --port $MASTER_PORT --enable_amp --compile \
+--save_path ./save/experiments/ntu120_xset/
+
+# python dist_train.py \
+# --config configs/pkuv1_xsub/linear_probe.yaml \
+# --name pkuv1_xsub --tag linear_probe_1100EP --port $MASTER_PORT --enable_amp --compile \
+# --save_path ./save/experiments/pkuv1_xsub

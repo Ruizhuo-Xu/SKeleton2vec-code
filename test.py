@@ -115,8 +115,8 @@ def main(rank, world_size, config_, save_path, args):
         # save_name = save_path.split('/')[-1]
         # wandb.init(project='Skeleton2vec', name=save_name)
         log = utils.set_save_path(save_path, remove=False)
-        log = partial(log, filename='test_log.txt')
-        with open(os.path.join(save_path, 'test_config.yaml'), 'w') as f:
+        log = partial(log, filename=f'test_log_{args.port}.txt')
+        with open(os.path.join(save_path, f'test_config_{args.port}.yaml'), 'w') as f:
             yaml.dump(config, f, sort_keys=False)
     dist.barrier()
 

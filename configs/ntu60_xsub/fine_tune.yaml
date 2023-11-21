@@ -69,7 +69,7 @@ model:
         num_joints: 25
         drop_p: 0.3
     # encoder_pretrain_weight: checkpoints/ntu60_xsub/ntu60_xsub_pretrain_1e-3lr_1e-5min_lr/epoch-800.pth
-    encoder_pretrain_weight: checkpoints/ntu60_xsub/11-11/epoch-500.pth
+    encoder_pretrain_weight: checkpoints/ntu60_xsub/11-11/epoch-600.pth
     # encoder_pretrain_weight: checkpoints/ntu60_xsub/epoch-800.pth
     encoder_freeze: false
     drop_path_p: 0.30

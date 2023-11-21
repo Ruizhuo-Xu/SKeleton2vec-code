@@ -358,6 +358,7 @@ if __name__ == "__main__":
     parser.add_argument('--config')
     parser.add_argument('--name', default=None)
     parser.add_argument('--tag', default=None)
+    parser.add_argument('--save_path', default='./save')
     parser.add_argument('--gpu', default='0')
     parser.add_argument('--port', default='12355')
     parser.add_argument('--enable_amp', action='store_true', default=False,
@@ -366,6 +367,7 @@ if __name__ == "__main__":
                         help='Enabling torch.Compile')
     parser.add_argument('--drop_path', type=float, default=None)
     parser.add_argument('--layer_decay', type=float, default=None)
+    parser.add_argument('--ckp', type=str, default=None)
     args = parser.parse_args()
     
     # setup_seed(42)
@@ -380,13 +382,15 @@ if __name__ == "__main__":
         config['model']['args']['drop_path_p'] = args.drop_path
     if args.layer_decay is not None:
         config['layer_decay'] = args.layer_decay
+    if args.ckp is not None:
+        config['model']['args']['encoder_pretrain_weight'] = args.ckp
 
     save_name = args.name
     if save_name is None:
         save_name = '_' + args.config.split('/')[-1][:-len('.yaml')]
     if args.tag is not None:
         save_name += '_' + args.tag
-    save_path = os.path.join('./save', save_name)
+    save_path = os.path.join(args.save_path, save_name)
 
     if args.enable_amp:
         print('Enable amp')
